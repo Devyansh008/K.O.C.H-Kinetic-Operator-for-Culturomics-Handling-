@@ -1,0 +1,97 @@
+// Prisma schema for Project K.O.C.H.
+// Generator
+generator client {
+  provider = "prisma-client-js"
+}
+
+generator zod {
+  provider = "zod-prisma-types"
+  output   = "./src/lib/zod"
+}
+
+// Datasource
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Models
+model Experiment {
+  id            String   @id @default(cuid())
+  name          String
+  startedAt     DateTime @default(now())
+  endedAt       DateTime?
+  status        ExperimentStatus @default(ACTIVE)
+  plates        Plate[]
+  events        TelemetryEvent[]
+  elnReports    ElnReport[]
+}
+
+model Plate {
+  id            String   @id @default(cuid())
+  experimentId  String
+  experiment    Experiment @relation(fields: [experimentId], references: [id])
+  label         String      // e.g. "Plate 4"
+  wells         Well[]
+}
+
+model Well {
+  id            String   @id @default(cuid())
+  plateId       String
+  plate         Plate    @relation(fields: [plateId], references: [id])
+  coordinate    String   // e.g. "C7"
+  events        TelemetryEvent[]
+  detections    ColonyDetection[]
+}
+
+model TelemetryEvent {
+  id            String   @id @default(cuid())
+  experimentId  String
+  experiment    Experiment @relation(fields: [experimentId], references: [id])
+  wellId        String?
+  well          Well?    @relation(fields: [wellId], references: [id])
+  type          EventType   // VOICE_UTTERANCE | INTENT | FRAME_MARK | STATE_CHANGE
+  rawPayload    Json        // transcript, intent object, or state diff
+  frameTimestamp DateTime?
+  createdAt     DateTime @default(now())
+  // append-only: no update/delete paths exposed via server functions
+}
+
+model ColonyDetection {
+  id            String   @id @default(cuid())
+  wellId        String
+  well          Well     @relation(fields: [wellId], references: [id])
+  detectedAt    DateTime @default(now())
+  confidence    Float
+  growthVelocity Float?
+  cvProvider    String   // which cloud CV endpoint produced this
+}
+
+model ElnReport {
+  id            String   @id @default(cuid())
+  experimentId  String
+  experiment    Experiment @relation(fields: [experimentId], references: [id])
+  format        ReportFormat // PDF | MARKDOWN | ISA_TAB | JSON
+  storageUrl    String
+  generatedAt   DateTime @default(now())
+}
+
+enum ExperimentStatus {
+  ACTIVE
+  COMPLETED
+  ABORTED
+}
+
+enum EventType {
+  VOICE_UTTERANCE
+  INTENT
+  FRAME_MARK
+  STATE_CHANGE
+}
+
+enum ReportFormat {
+  PDF
+  MARKDOWN
+  ISA_TAB
+  JSON
+}
