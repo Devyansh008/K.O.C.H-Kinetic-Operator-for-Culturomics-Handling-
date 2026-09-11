@@ -238,6 +238,23 @@ export async function createColonyDetection(
   });
 }
 
+/**
+ * Retrieves all ColonyDetection records for a well, ordered oldest-first.
+ * Used by the perception service to compute growth velocity trends from
+ * historical CV detections before generating recipe recommendations.
+ *
+ * @param wellId  CUID of the well
+ * @returns       Array of ColonyDetection rows (may be empty)
+ */
+export async function getColonyDetectionsByWell(
+  wellId: string,
+): Promise<ColonyDetection[]> {
+  return prisma.colonyDetection.findMany({
+    where: { wellId },
+    orderBy: { detectedAt: 'asc' },
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ELN REPORTS
 // ═══════════════════════════════════════════════════════════════════════════════
