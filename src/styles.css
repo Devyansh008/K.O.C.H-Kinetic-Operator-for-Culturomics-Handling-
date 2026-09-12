@@ -1,0 +1,111 @@
+/* ── Google Fonts ─────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base resets ──────────────────────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    @apply bg-lab-bg text-lab-text font-sans antialiased;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-lab-bg text-lab-text min-h-screen;
+  }
+
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track  { @apply bg-lab-bg; }
+  ::-webkit-scrollbar-thumb  { @apply bg-lab-border rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-lab-muted; }
+}
+
+/* ── Component layer ──────────────────────────────────────────────────────── */
+@layer components {
+
+  /* Cards */
+  .card {
+    @apply bg-lab-card border border-lab-border rounded-xl p-5;
+  }
+  .card-header {
+    @apply text-xs font-mono font-semibold uppercase tracking-widest text-lab-accent mb-3 flex items-center gap-2;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm
+           transition-all duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-lab-accent text-lab-bg hover:brightness-110 active:scale-95
+           shadow-[0_0_12px_#00d4aa40] hover:shadow-[0_0_20px_#00d4aa70];
+  }
+  .btn-danger {
+    @apply btn bg-lab-danger text-white hover:brightness-110 active:scale-95;
+  }
+  .btn-ghost {
+    @apply btn border border-lab-border text-lab-subtext hover:border-lab-accent hover:text-lab-accent;
+  }
+
+  /* Status badges */
+  .badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold;
+  }
+  .badge-active  { @apply badge bg-lab-accent/15 text-lab-accent border border-lab-accent/30; }
+  .badge-done    { @apply badge bg-lab-success/15 text-lab-success border border-lab-success/30; }
+  .badge-warn    { @apply badge bg-lab-warn/15 text-lab-warn border border-lab-warn/30; }
+  .badge-neutral { @apply badge bg-lab-muted/20 text-lab-subtext border border-lab-border; }
+
+  /* Input */
+  .input {
+    @apply w-full bg-lab-surface border border-lab-border rounded-lg px-3 py-2
+           text-sm text-lab-text placeholder-lab-muted focus:outline-none
+           focus:border-lab-accent focus:ring-1 focus:ring-lab-accent/30 transition-colors;
+  }
+
+  /* Metric readout */
+  .metric-value {
+    @apply text-2xl font-mono font-bold text-lab-accent tabular-nums;
+  }
+  .metric-label {
+    @apply text-[10px] uppercase tracking-widest font-mono text-lab-subtext mt-0.5;
+  }
+
+  /* Animated status dot */
+  .status-dot {
+    @apply w-2 h-2 rounded-full flex-shrink-0;
+  }
+  .status-dot-active {
+    @apply status-dot bg-lab-accent animate-pulse;
+  }
+
+  /* Log entry */
+  .log-entry {
+    @apply font-mono text-xs border-l-2 border-lab-border pl-3 py-1
+           hover:border-lab-accent hover:bg-lab-accent/5 transition-colors;
+  }
+  .log-entry-intent   { @apply border-lab-accent2; }
+  .log-entry-frame    { @apply border-lab-accent; }
+  .log-entry-utterance { @apply border-lab-warn; }
+  .log-entry-detection { @apply border-lab-success; }
+
+  /* Plate grid cell */
+  .well-cell {
+    @apply w-8 h-8 rounded-md border border-lab-border flex items-center justify-center
+           text-[9px] font-mono font-bold transition-all duration-300 cursor-default;
+  }
+  .well-cell-active {
+    @apply well-cell border-lab-accent bg-lab-accent/20 text-lab-accent
+           shadow-[0_0_8px_#00d4aa60];
+  }
+  .well-cell-detected {
+    @apply well-cell border-lab-success bg-lab-success/15 text-lab-success;
+  }
+  .well-cell-inactive {
+    @apply well-cell border-lab-border bg-lab-surface text-lab-muted;
+  }
+}
