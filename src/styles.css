@@ -41,11 +41,11 @@
            transition-all duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply btn bg-lab-accent text-lab-bg hover:brightness-110 active:scale-95
-           shadow-[0_0_12px_#00d4aa40] hover:shadow-[0_0_20px_#00d4aa70];
+    @apply btn bg-lab-accent text-lab-bg hover:brightness-90 active:scale-95
+           shadow-[0_0_12px_rgba(255,255,255,0.2)] hover:shadow-[0_0_20px_rgba(255,255,255,0.4)];
   }
   .btn-danger {
-    @apply btn bg-lab-danger text-white hover:brightness-110 active:scale-95;
+    @apply btn bg-lab-danger text-lab-bg hover:brightness-110 active:scale-95;
   }
   .btn-ghost {
     @apply btn border border-lab-border text-lab-subtext hover:border-lab-accent hover:text-lab-accent;
@@ -55,9 +55,9 @@
   .badge {
     @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold;
   }
-  .badge-active  { @apply badge bg-lab-accent/15 text-lab-accent border border-lab-accent/30; }
-  .badge-done    { @apply badge bg-lab-success/15 text-lab-success border border-lab-success/30; }
-  .badge-warn    { @apply badge bg-lab-warn/15 text-lab-warn border border-lab-warn/30; }
+  .badge-active  { @apply badge bg-lab-accent/10 text-lab-accent border border-lab-accent/30; }
+  .badge-done    { @apply badge bg-lab-success/10 text-lab-success border border-lab-success/30; }
+  .badge-warn    { @apply badge bg-lab-warn/10 text-lab-warn border border-lab-warn/30; }
   .badge-neutral { @apply badge bg-lab-muted/20 text-lab-subtext border border-lab-border; }
 
   /* Input */
@@ -99,11 +99,11 @@
            text-[9px] font-mono font-bold transition-all duration-300 cursor-default;
   }
   .well-cell-active {
-    @apply well-cell border-lab-accent bg-lab-accent/20 text-lab-accent
-           shadow-[0_0_8px_#00d4aa60];
+    @apply well-cell border-lab-accent bg-lab-accent/10 text-lab-accent
+           shadow-[0_0_8px_rgba(255,255,255,0.25)];
   }
   .well-cell-detected {
-    @apply well-cell border-lab-success bg-lab-success/15 text-lab-success;
+    @apply well-cell border-lab-success bg-lab-success/10 text-lab-success;
   }
   .well-cell-inactive {
     @apply well-cell border-lab-border bg-lab-surface text-lab-muted;
