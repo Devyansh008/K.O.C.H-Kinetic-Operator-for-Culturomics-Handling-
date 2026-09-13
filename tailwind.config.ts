@@ -5,20 +5,20 @@ export default {
   theme: {
     extend: {
       colors: {
-        // K.O.C.H. lab palette
+        // K.O.C.H. lab palette — Black & White edition
         lab: {
-          bg:       '#0a0c10',
-          surface:  '#111318',
-          card:     '#16191f',
-          border:   '#1e2330',
-          accent:   '#00d4aa',
-          accent2:  '#6c63ff',
-          warn:     '#f5a623',
-          danger:   '#e8445a',
-          success:  '#2dd4ac',
-          muted:    '#4a5568',
-          text:     '#e2e8f0',
-          subtext:  '#718096',
+          bg:       '#000000',   // pure black
+          surface:  '#0c0c0c',   // near-black surface
+          card:     '#141414',   // elevated card
+          border:   '#222222',   // subtle border
+          accent:   '#ffffff',   // pure white — primary interactive
+          accent2:  '#909090',   // medium gray — secondary
+          warn:     '#cccccc',   // light gray — warnings
+          danger:   '#aaaaaa',   // medium-light gray — errors
+          success:  '#d4d4d4',   // near-white — positive states
+          muted:    '#444444',   // dark-medium gray
+          text:     '#f0f0f0',   // near-white text
+          subtext:  '#707070',   // mid gray subtext
         },
       },
       fontFamily: {
@@ -36,11 +36,12 @@ export default {
           '100%': { transform: 'translateY(100vh)' },
         },
         glow: {
-          '0%':   { boxShadow: '0 0 5px #00d4aa40' },
-          '100%': { boxShadow: '0 0 20px #00d4aa80, 0 0 40px #00d4aa30' },
+          '0%':   { boxShadow: '0 0 5px rgba(255,255,255,0.15)' },
+          '100%': { boxShadow: '0 0 20px rgba(255,255,255,0.45), 0 0 40px rgba(255,255,255,0.1)' },
         },
       },
     },
   },
   plugins: [],
 } satisfies Config;
+
