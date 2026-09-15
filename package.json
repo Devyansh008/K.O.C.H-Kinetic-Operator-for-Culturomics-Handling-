@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "start": "node .output/server/index.mjs"
+    "start": "node .output/server/index.mjs",
+    "test": "tsx test/integration/full-31-endpoints.test.ts",
+    "test:all": "tsx test/integration/full-31-endpoints.test.ts",
+    "test:backend": "tsx test/integration/koch-backend.test.ts"
   },
   "dependencies": {
     "@livekit/components-react": "^2.0.0",

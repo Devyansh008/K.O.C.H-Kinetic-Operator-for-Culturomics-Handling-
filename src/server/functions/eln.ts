@@ -59,6 +59,48 @@ export const generateElnReport = createServerFn({ method: 'POST' })
     return report;
   });
 
+// ─── downloadElnReport (#26) ────────────────────────────────────────────────
+
+const DownloadElnReportSchema = z.object({
+  experimentId: z.string().min(1),
+  format: z.enum(['PDF', 'MARKDOWN']).default('MARKDOWN'),
+});
+
+type DownloadElnReportInput = z.infer<typeof DownloadElnReportSchema>;
+
+export interface DownloadElnReportResponse {
+  format: 'PDF' | 'MARKDOWN';
+  content: string;
+  mimeType: string;
+  filename: string;
+  sizeBytes: number;
+  storageUrl: string;
+}
+
+/**
+ * Streams or downloads generated immutable ELN PDF/Markdown report artifacts.
+ *
+ * Module 7 (#26): `downloadElnReport` → `{ experimentId, format }` → `DownloadElnReportResponse`
+ */
+export const downloadElnReport = createServerFn({ method: 'GET' })
+  .validator((data: unknown) => DownloadElnReportSchema.parse(data))
+  .handler(async ({ data }: { data: DownloadElnReportInput }): Promise<DownloadElnReportResponse> => {
+    const compiled = await compileElnDocument(data.experimentId, data.format);
+    const ext = data.format === 'PDF' ? 'pdf' : 'md';
+    const mimeType = data.format === 'PDF' ? 'application/pdf' : 'text/markdown; charset=utf-8';
+    const filename = `koch_eln_${data.experimentId}_${Date.now()}.${ext}`;
+
+    return {
+      format: data.format,
+      content: compiled.content,
+      mimeType,
+      filename,
+      sizeBytes: Buffer.byteLength(compiled.content, data.format === 'PDF' ? 'base64' : 'utf8'),
+      storageUrl: compiled.storageUrl,
+    };
+  });
+
+
 // ─── exportStandardized ───────────────────────────────────────────────────────
 
 const ExportStandardizedSchema = z.object({

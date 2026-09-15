@@ -5,8 +5,11 @@ generator client {
 }
 
 generator zod {
-  provider = "zod-prisma-types"
-  output   = "../src/lib/zod"
+  provider         = "zod-prisma-types"
+  output           = "../src/lib/zod"
+  createInputTypes = false
+  addIncludeType   = false
+  addSelectType    = false
 }
 
 // Datasource
@@ -80,6 +83,7 @@ enum ExperimentStatus {
   ACTIVE
   COMPLETED
   ABORTED
+  ARCHIVED
 }
 
 enum EventType {
