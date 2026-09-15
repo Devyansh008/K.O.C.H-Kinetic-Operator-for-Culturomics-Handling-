@@ -21,16 +21,35 @@ import {
   type TelemetryEvent,
   type ColonyDetection,
   type ElnReport,
-  ExperimentStatus,
-  EventType,
-  ReportFormat,
-  Prisma,
+  type Prisma,
 } from '@prisma/client';
 
 import prisma from '../../lib/prisma';
 
-// ─── Re-export enums so callers import from a single location ────────────────
-export { ExperimentStatus, EventType, ReportFormat };
+// ─── Enums with explicit literal typing for rock-solid TS resolution ────────
+export const ExperimentStatus = {
+  ACTIVE: 'ACTIVE',
+  COMPLETED: 'COMPLETED',
+  ABORTED: 'ABORTED',
+  ARCHIVED: 'ARCHIVED',
+} as const;
+export type ExperimentStatus = (typeof ExperimentStatus)[keyof typeof ExperimentStatus];
+
+export const EventType = {
+  VOICE_UTTERANCE: 'VOICE_UTTERANCE',
+  INTENT: 'INTENT',
+  FRAME_MARK: 'FRAME_MARK',
+  STATE_CHANGE: 'STATE_CHANGE',
+} as const;
+export type EventType = (typeof EventType)[keyof typeof EventType];
+
+export const ReportFormat = {
+  PDF: 'PDF',
+  MARKDOWN: 'MARKDOWN',
+  ISA_TAB: 'ISA_TAB',
+  JSON: 'JSON',
+} as const;
+export type ReportFormat = (typeof ReportFormat)[keyof typeof ReportFormat];
 
 // ─── Convenience type: a fully-hydrated Experiment ──────────────────────────
 export type ExperimentWithRelations = Experiment & {
@@ -95,7 +114,7 @@ export async function getExperimentById(
 
 /**
  * Updates the lifecycle status of an Experiment.
- * Valid transitions: ACTIVE → COMPLETED | ABORTED
+ * Valid transitions: ACTIVE → COMPLETED | ABORTED | ARCHIVED
  *
  * @param id      CUID of the experiment
  * @param status  New ExperimentStatus value
@@ -109,6 +128,69 @@ export async function updateExperimentStatus(
     where: { id },
     data: { status },
   });
+}
+
+/**
+ * Soft-archives an experiment by updating its status to ARCHIVED.
+ *
+ * @param id  CUID of the experiment
+ * @returns   The updated Experiment row
+ */
+export async function archiveExperiment(id: string): Promise<Experiment> {
+  return updateExperimentStatus(id, ExperimentStatus.ARCHIVED);
+}
+
+export interface ListExperimentsOptions {
+  page?: number;
+  limit?: number;
+  status?: ExperimentStatus;
+  search?: string;
+}
+
+export interface ListExperimentsResult {
+  experiments: Experiment[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+/**
+ * Paginated, status-filtered, and searchable query of experiment records.
+ */
+export async function listExperiments(
+  options: ListExperimentsOptions = {},
+): Promise<ListExperimentsResult> {
+  const page = Math.max(1, options.page ?? 1);
+  const limit = Math.max(1, Math.min(100, options.limit ?? 20));
+  const skip = (page - 1) * limit;
+
+  const where: Prisma.ExperimentWhereInput = {};
+  if (options.status) {
+    where.status = options.status;
+  }
+  if (options.search) {
+    where.name = {
+      contains: options.search,
+      mode: 'insensitive',
+    };
+  }
+
+  const [experiments, total] = await Promise.all([
+    prisma.experiment.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { startedAt: 'desc' },
+    }),
+    prisma.experiment.count({ where }),
+  ]);
+
+  return {
+    experiments,
+    total,
+    page,
+    limit,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -149,6 +231,21 @@ export async function createPlateWithWells(
 }
 
 /**
+ * Fetches a plate by ID including its wells.
+ *
+ * @param id  CUID of the Plate
+ * @returns   Plate with wells, or null if not found
+ */
+export async function getPlateWithWells(id: string): Promise<PlateWithWells | null> {
+  return prisma.plate.findUnique({
+    where: { id },
+    include: {
+      wells: true,
+    },
+  });
+}
+
+/**
  * Fetches a specific Well by its plate and grid coordinate.
  * Used to resolve voice commands like "Mark plate 4 well C7" to a DB row.
  *
@@ -163,6 +260,68 @@ export async function getWellByCoordinate(
   return prisma.well.findFirst({
     where: { plateId, coordinate },
   });
+}
+
+/**
+ * Fetches a well by ID.
+ *
+ * @param id  CUID of the Well
+ * @returns   Well row or null
+ */
+export async function getWellById(id: string): Promise<Well | null> {
+  return prisma.well.findUnique({
+    where: { id },
+  });
+}
+
+/**
+ * Fetches chronological history of mutations, telemetry events, and
+ * colony detections for an individual well.
+ */
+export async function getWellHistory(wellId: string): Promise<{
+  well: Well | null;
+  events: TelemetryEvent[];
+  detections: ColonyDetection[];
+}> {
+  const well = await prisma.well.findUnique({
+    where: { id: wellId },
+    include: {
+      events: {
+        orderBy: { createdAt: 'asc' },
+      },
+      detections: {
+        orderBy: { detectedAt: 'asc' },
+      },
+    },
+  });
+
+  if (!well) {
+    return { well: null, events: [], detections: [] };
+  }
+
+  return {
+    well,
+    events: well.events,
+    detections: well.detections,
+  };
+}
+
+/**
+ * Fetches chronological history for an individual well identified by plate ID and coordinate.
+ */
+export async function getWellHistoryByCoordinate(
+  plateId: string,
+  coordinate: string,
+): Promise<{
+  well: Well | null;
+  events: TelemetryEvent[];
+  detections: ColonyDetection[];
+}> {
+  const well = await getWellByCoordinate(plateId, coordinate);
+  if (!well) {
+    return { well: null, events: [], detections: [] };
+  }
+  return getWellHistory(well.id);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -181,6 +340,7 @@ export interface LogTelemetryEventInput {
   /** Arbitrary JSON payload — transcript text, intent object, or state diff */
   rawPayload: Prisma.InputJsonValue;
   frameTimestamp?: Date;
+  createdAt?: Date;
 }
 
 /**
@@ -200,7 +360,74 @@ export async function logTelemetryEvent(
       type: data.type,
       rawPayload: data.rawPayload as Prisma.InputJsonValue,
       frameTimestamp: data.frameTimestamp,
+      ...(data.createdAt ? { createdAt: data.createdAt } : {}),
     },
+  });
+}
+
+/**
+ * Bulk-inserts queued events into the TelemetryEvent log.
+ * Used for offline buffer flushes after network reconnection.
+ */
+export async function batchCreateTelemetryEvents(
+  events: LogTelemetryEventInput[],
+): Promise<{ count: number }> {
+  return prisma.telemetryEvent.createMany({
+    data: events.map((e) => ({
+      experimentId: e.experimentId,
+      wellId: e.wellId,
+      type: e.type,
+      rawPayload: e.rawPayload as Prisma.InputJsonValue,
+      frameTimestamp: e.frameTimestamp,
+      ...(e.createdAt ? { createdAt: e.createdAt } : {}),
+    })),
+  });
+}
+
+export interface GetTelemetryEventsOptions {
+  type?: EventType;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Queries chronologically ordered TelemetryEvent records for an experiment.
+ */
+export async function getTelemetryEventsByExperiment(
+  experimentId: string,
+  options: GetTelemetryEventsOptions = {},
+): Promise<TelemetryEvent[]> {
+  const where: Prisma.TelemetryEventWhereInput = {
+    experimentId,
+  };
+
+  if (options.type) {
+    where.type = options.type;
+  }
+
+  return prisma.telemetryEvent.findMany({
+    where,
+    orderBy: { createdAt: 'asc' },
+    take: options.limit ? Math.min(1000, options.limit) : undefined,
+    skip: options.offset,
+  });
+}
+
+/**
+ * Queries voice command history for an experiment (VOICE_UTTERANCE and INTENT events).
+ */
+export async function getVoiceAuditEvents(
+  experimentId: string,
+  options: { limit?: number; offset?: number } = {},
+): Promise<TelemetryEvent[]> {
+  return prisma.telemetryEvent.findMany({
+    where: {
+      experimentId,
+      type: { in: [EventType.VOICE_UTTERANCE, EventType.INTENT] },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: options.limit ? Math.min(500, options.limit) : 50,
+    skip: options.offset,
   });
 }
 
