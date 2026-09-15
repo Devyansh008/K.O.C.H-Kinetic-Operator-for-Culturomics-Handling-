@@ -300,7 +300,7 @@ export async function getWellHistory(wellId: string): Promise<{
   }
 
   return {
-    well: { id: well.id, plateId: well.plateId, coordinate: well.coordinate },
+    well,
     events: well.events,
     detections: well.detections,
   };

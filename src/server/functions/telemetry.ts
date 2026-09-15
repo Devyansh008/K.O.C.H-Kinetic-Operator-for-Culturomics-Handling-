@@ -38,10 +38,10 @@ import { updateActiveState, type ActiveCoordinate } from '../services/state';
 const ResolvedIntentSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('MARK_WELL'),
-    plateLabel: z.string(),
-    plateId: z.string(),
-    wellCoordinate: z.string(),
-    wellId: z.string(),
+    plateLabel: z.string().optional(),
+    plateId: z.string().optional(),
+    wellCoordinate: z.string().optional(),
+    wellId: z.string().optional(),
   }),
   z.object({
     action: z.literal('ADD_TUBE'),
@@ -108,10 +108,10 @@ export const ingestVoiceIntent = createServerFn({ method: 'POST' })
     switch (data.intent.action) {
       case 'MARK_WELL': {
         const coord: ActiveCoordinate = {
-          plateLabel: data.intent.plateLabel,
-          plateId: data.intent.plateId,
-          wellCoordinate: data.intent.wellCoordinate,
-          wellId: data.intent.wellId,
+          plateLabel: data.intent.plateLabel ?? '',
+          plateId: data.intent.plateId ?? '',
+          wellCoordinate: data.intent.wellCoordinate ?? '',
+          wellId: data.intent.wellId ?? '',
         };
         updateActiveState(data.experimentId, { activeCoordinate: coord });
         break;

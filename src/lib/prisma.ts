@@ -2,18 +2,6 @@
  * src/lib/prisma.ts
  *
  * Globally-cached PrismaClient singleton for Project K.O.C.H.
- *
- * Why globalThis caching?
- * - TanStack Start runs on Nitro, which can hot-reload modules during
- *   development, creating multiple PrismaClient instances and exhausting
- *   the connection pool against Turso / Supabase.
- * - In production / serverless environments the process is long-lived, but
- *   edge cold-starts would still spin up a fresh module scope without this.
- * - Attaching to `globalThis` (which survives module hot-reloads in Node)
- *   ensures exactly one PrismaClient per Node.js process.
- *
- * Reference:
- *   https://www.prisma.io/docs/guides/performance-and-optimization/connection-management
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -31,9 +19,12 @@ function createInMemoryPrisma(): PrismaClient {
   const experiments = new Map<string, any>();
   const plates = new Map<string, any>();
   const wells = new Map<string, any>();
+  const wellStates = new Map<string, any>();
   const telemetryEvents: any[] = [];
+  const voiceIntentLogs: any[] = [];
   const colonyDetections: any[] = [];
   const elnReports: any[] = [];
+  const systemMetrics: any[] = [];
 
   const mockClient = {
     experiment: {
@@ -72,6 +63,9 @@ function createInMemoryPrisma(): PrismaClient {
         }
         if (include?.events) {
           result.events = telemetryEvents.filter((e) => e.experimentId === exp.id);
+        }
+        if (include?.voiceLogs) {
+          result.voiceLogs = voiceIntentLogs.filter((v) => v.experimentId === exp.id);
         }
         if (include?.elnReports) {
           result.elnReports = elnReports.filter((r) => r.experimentId === exp.id);
@@ -112,33 +106,37 @@ function createInMemoryPrisma(): PrismaClient {
 
     plate: {
       async create({ data, include }: { data: any; include?: any }) {
-        const plateId = generateCuid();
-        const createdWells: any[] = [];
+        const id = generateCuid();
+        const record = {
+          id,
+          experimentId: data.experimentId,
+          label: data.label,
+          format: data.format ?? 'WELL_96',
+        };
+        plates.set(id, record);
 
         if (data.wells?.createMany?.data) {
-          for (const item of data.wells.createMany.data) {
+          const createdWells: any[] = [];
+          for (const w of data.wells.createMany.data) {
             const wellId = generateCuid();
             const wellRecord = {
               id: wellId,
-              plateId,
-              coordinate: item.coordinate,
+              plateId: id,
+              coordinate: w.coordinate,
+              status: w.status ?? 'UNINOCULATED',
+              media: w.media ?? null,
+              opticalDensity: w.opticalDensity ?? null,
+              contents: w.contents ?? null,
+              notes: w.notes ?? null,
             };
             wells.set(wellId, wellRecord);
             createdWells.push(wellRecord);
           }
+          if (include?.wells) {
+            return { ...record, wells: createdWells };
+          }
         }
-
-        const plateRecord = {
-          id: plateId,
-          experimentId: data.experimentId,
-          label: data.label,
-        };
-        plates.set(plateId, plateRecord);
-
-        if (include?.wells) {
-          return { ...plateRecord, wells: createdWells };
-        }
-        return plateRecord;
+        return record;
       },
       async findUnique({ where, include }: { where: { id: string }; include?: any }) {
         const plate = plates.get(where.id);
@@ -147,18 +145,32 @@ function createInMemoryPrisma(): PrismaClient {
           const plateWells = Array.from(wells.values()).filter((w) => w.plateId === plate.id);
           return { ...plate, wells: plateWells };
         }
-        return plate;
+        return { ...plate };
+      },
+      async findMany({ where }: any = {}) {
+        let list = Array.from(plates.values());
+        if (where?.experimentId) {
+          list = list.filter((p) => p.experimentId === where.experimentId);
+        }
+        return list;
       },
     },
 
     well: {
-      async findFirst({ where }: { where: { plateId: string; coordinate: string } }) {
-        for (const well of wells.values()) {
-          if (well.plateId === where.plateId && well.coordinate === where.coordinate) {
-            return well;
-          }
-        }
-        return null;
+      async create({ data }: { data: any }) {
+        const id = generateCuid();
+        const record = {
+          id,
+          plateId: data.plateId,
+          coordinate: data.coordinate,
+          status: data.status ?? 'UNINOCULATED',
+          media: data.media ?? null,
+          opticalDensity: data.opticalDensity ?? null,
+          contents: data.contents ?? null,
+          notes: data.notes ?? null,
+        };
+        wells.set(id, record);
+        return record;
       },
       async findUnique({ where, include }: { where: { id: string }; include?: any }) {
         const well = wells.get(where.id);
@@ -175,6 +187,68 @@ function createInMemoryPrisma(): PrismaClient {
             .sort((a, b) => a.detectedAt.getTime() - b.detectedAt.getTime());
         }
         return result;
+      },
+      async findFirst({ where }: { where: { plateId?: string; coordinate?: string } }) {
+        for (const w of wells.values()) {
+          if (
+            (!where.plateId || w.plateId === where.plateId) &&
+            (!where.coordinate || w.coordinate === where.coordinate)
+          ) {
+            return { ...w };
+          }
+        }
+        return null;
+      },
+      async update({ where, data }: { where: { id: string }; data: any }) {
+        const well = wells.get(where.id);
+        if (!well) throw new Error(`Well not found: ${where.id}`);
+        const updated = { ...well, ...data };
+        wells.set(where.id, updated);
+        return updated;
+      },
+      async findMany({ where }: any = {}) {
+        let list = Array.from(wells.values());
+        if (where?.plateId) {
+          list = list.filter((w) => w.plateId === where.plateId);
+        }
+        return list;
+      },
+    },
+
+    wellState: {
+      async create({ data }: { data: any }) {
+        const id = generateCuid();
+        const record = {
+          id,
+          wellId: data.wellId,
+          coordinate: data.coordinate,
+          plateId: data.plateId,
+          status: data.status ?? 'UNINOCULATED',
+          media: data.media ?? null,
+          opticalDensity: data.opticalDensity ?? null,
+          notes: data.notes ?? null,
+          updatedAt: new Date(),
+        };
+        wellStates.set(record.wellId, record);
+        return record;
+      },
+      async findUnique({ where }: { where: { wellId: string } }) {
+        return wellStates.get(where.wellId) ?? null;
+      },
+      async upsert({ where, update, create }: any) {
+        const existing = wellStates.get(where.wellId);
+        if (existing) {
+          const updated = { ...existing, ...update, updatedAt: new Date() };
+          wellStates.set(where.wellId, updated);
+          return updated;
+        }
+        const created = {
+          id: generateCuid(),
+          ...create,
+          updatedAt: new Date(),
+        };
+        wellStates.set(where.wellId, created);
+        return created;
       },
     },
 
@@ -213,6 +287,9 @@ function createInMemoryPrisma(): PrismaClient {
         if (where?.experimentId) {
           events = events.filter((e) => e.experimentId === where.experimentId);
         }
+        if (where?.wellId) {
+          events = events.filter((e) => e.wellId === where.wellId);
+        }
         if (where?.type) {
           if (typeof where.type === 'object' && where.type.in) {
             events = events.filter((e) => where.type.in.includes(e.type));
@@ -227,6 +304,67 @@ function createInMemoryPrisma(): PrismaClient {
         }
         const sliced = events.slice(skip);
         return take ? sliced.slice(0, take) : sliced;
+      },
+      async count({ where }: any = {}) {
+        let events = [...telemetryEvents];
+        if (where?.experimentId) {
+          events = events.filter((e) => e.experimentId === where.experimentId);
+        }
+        if (where?.wellId) {
+          events = events.filter((e) => e.wellId === where.wellId);
+        }
+        return events.length;
+      },
+      async update() {
+        throw new Error('TelemetryEvent is strictly append-only. Direct updates are prohibited.');
+      },
+      async delete() {
+        throw new Error('TelemetryEvent is strictly append-only. Direct deletes are prohibited.');
+      },
+    },
+
+    voiceIntentLog: {
+      async create({ data }: { data: any }) {
+        const id = generateCuid();
+        const record = {
+          id,
+          experimentId: data.experimentId,
+          transcript: data.transcript,
+          intent: data.intent,
+          confidence: data.confidence ?? 1.0,
+          status: data.status ?? 'PROCESSED',
+          createdAt: data.createdAt ?? new Date(),
+        };
+        voiceIntentLogs.push(record);
+        return record;
+      },
+      async findMany({ where, take, orderBy }: any = {}) {
+        let logs = [...voiceIntentLogs];
+        if (where?.experimentId) {
+          logs = logs.filter((l) => l.experimentId === where.experimentId);
+        }
+        if (where?.status) {
+          logs = logs.filter((l) => l.status === where.status);
+        }
+        if (orderBy?.createdAt === 'desc') {
+          logs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        } else {
+          logs.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+        }
+        return take ? logs.slice(0, take) : logs;
+      },
+      async count({ where }: any = {}) {
+        let logs = [...voiceIntentLogs];
+        if (where?.experimentId) {
+          logs = logs.filter((l) => l.experimentId === where.experimentId);
+        }
+        return logs.length;
+      },
+      async update() {
+        throw new Error('VoiceIntentLog is strictly append-only. Direct updates are prohibited.');
+      },
+      async delete() {
+        throw new Error('VoiceIntentLog is strictly append-only. Direct deletes are prohibited.');
       },
     },
 
@@ -244,10 +382,12 @@ function createInMemoryPrisma(): PrismaClient {
         colonyDetections.push(record);
         return record;
       },
-      async findMany({ where }: { where: { wellId: string } }) {
-        return colonyDetections
-          .filter((d) => d.wellId === where.wellId)
-          .sort((a, b) => a.detectedAt.getTime() - b.detectedAt.getTime());
+      async findMany({ where }: { where?: { wellId?: string } } = {}) {
+        let list = [...colonyDetections];
+        if (where?.wellId) {
+          list = list.filter((d) => d.wellId === where.wellId);
+        }
+        return list.sort((a, b) => a.detectedAt.getTime() - b.detectedAt.getTime());
       },
     },
 
@@ -263,6 +403,37 @@ function createInMemoryPrisma(): PrismaClient {
         };
         elnReports.push(record);
         return record;
+      },
+      async findMany({ where }: any = {}) {
+        let list = [...elnReports];
+        if (where?.experimentId) {
+          list = list.filter((r) => r.experimentId === where.experimentId);
+        }
+        return list;
+      },
+    },
+
+    systemMetric: {
+      async create({ data }: { data: any }) {
+        const id = generateCuid();
+        const record = {
+          id,
+          serverStatus: data.serverStatus ?? 'HEALTHY',
+          heapUsedMb: data.heapUsedMb,
+          heapTotalMb: data.heapTotalMb,
+          rssMb: data.rssMb,
+          uptimeSeconds: data.uptimeSeconds,
+          capturedAt: data.capturedAt ?? new Date(),
+        };
+        systemMetrics.push(record);
+        return record;
+      },
+      async findMany({ take, orderBy }: any = {}) {
+        let list = [...systemMetrics];
+        if (orderBy?.capturedAt === 'desc') {
+          list.sort((a, b) => b.capturedAt.getTime() - a.capturedAt.getTime());
+        }
+        return take ? list.slice(0, take) : list;
       },
     },
   };
@@ -295,5 +466,5 @@ if (process.env.NODE_ENV !== 'production') {
   globalThis.__prisma = prisma;
 }
 
+export { prisma, prisma as db };
 export default prisma;
-
