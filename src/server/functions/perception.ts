@@ -124,3 +124,23 @@ export const getRecipeRecommendation = createServerFn({ method: 'GET' })
 
     return recommendation;
   });
+
+// ─── getVisionDetections (#20) ──────────────────────────────────────────────
+
+const GetVisionDetectionsSchema = z.object({
+  wellId: z.string().min(1),
+});
+
+type GetVisionDetectionsInput = z.infer<typeof GetVisionDetectionsSchema>;
+
+/**
+ * Retrieves micro-colony growth detection records and bounding boxes for a specific well.
+ *
+ * Module 4 (#20): `getVisionDetections` → `{ wellId }` → `ColonyDetection[]`
+ */
+export const getVisionDetections = createServerFn({ method: 'GET' })
+  .validator((data: unknown) => GetVisionDetectionsSchema.parse(data))
+  .handler(async ({ data }: { data: GetVisionDetectionsInput }) => {
+    return getColonyDetectionsByWell(data.wellId);
+  });
+
