@@ -5,8 +5,11 @@ generator client {
 }
 
 generator zod {
-  provider = "zod-prisma-types"
-  output   = "../src/lib/zod"
+  provider         = "zod-prisma-types"
+  output           = "../src/server/db/zod"
+  createInputTypes = false
+  addIncludeType   = false
+  addSelectType    = false
 }
 
 // Datasource
@@ -17,76 +20,128 @@ datasource db {
 
 // Models
 model Experiment {
-  id            String   @id @default(cuid())
+  id            String           @id @default(cuid())
   name          String
-  startedAt     DateTime @default(now())
+  startedAt     DateTime         @default(now())
   endedAt       DateTime?
   status        ExperimentStatus @default(ACTIVE)
   plates        Plate[]
   events        TelemetryEvent[]
+  voiceLogs     VoiceIntentLog[]
   elnReports    ElnReport[]
 }
 
 model Plate {
-  id            String   @id @default(cuid())
+  id            String      @id @default(cuid())
   experimentId  String
-  experiment    Experiment @relation(fields: [experimentId], references: [id])
+  experiment    Experiment  @relation(fields: [experimentId], references: [id])
   label         String      // e.g. "Plate 4"
+  format        PlateFormat @default(WELL_96)
   wells         Well[]
 }
 
 model Well {
-  id            String   @id @default(cuid())
+  id            String            @id @default(cuid())
   plateId       String
-  plate         Plate    @relation(fields: [plateId], references: [id])
-  coordinate    String   // e.g. "C7"
+  plate         Plate             @relation(fields: [plateId], references: [id])
+  coordinate    String            // e.g. "C7"
+  status        String            @default("UNINOCULATED")
+  media         String?
+  opticalDensity Float?
+  contents      String?
+  notes         String?
   events        TelemetryEvent[]
   detections    ColonyDetection[]
 }
 
-model TelemetryEvent {
+model WellState {
   id            String   @id @default(cuid())
-  experimentId  String
-  experiment    Experiment @relation(fields: [experimentId], references: [id])
-  wellId        String?
-  well          Well?    @relation(fields: [wellId], references: [id])
-  type          EventType   // VOICE_UTTERANCE | INTENT | FRAME_MARK | STATE_CHANGE
-  rawPayload    Json        // transcript, intent object, or state diff
+  wellId        String   @unique
+  coordinate    String
+  plateId       String
+  status        String   @default("UNINOCULATED")
+  media         String?
+  opticalDensity Float?
+  notes         String?
+  updatedAt     DateTime @default(now()) @updatedAt
+}
+
+model TelemetryEvent {
+  id             String     @id @default(cuid())
+  experimentId   String
+  experiment     Experiment @relation(fields: [experimentId], references: [id])
+  wellId         String?
+  well           Well?      @relation(fields: [wellId], references: [id])
+  type           EventType  // VOICE_UTTERANCE | INTENT | FRAME_MARK | STATE_CHANGE | ...
+  rawPayload     Json       // transcript, intent object, or state diff
   frameTimestamp DateTime?
-  createdAt     DateTime @default(now())
+  createdAt      DateTime   @default(now())
   // append-only: no update/delete paths exposed via server functions
 }
 
+model VoiceIntentLog {
+  id           String      @id @default(cuid())
+  experimentId String
+  experiment   Experiment  @relation(fields: [experimentId], references: [id])
+  transcript   String
+  intent       Json
+  confidence   Float       @default(1.0)
+  status       String      @default("PROCESSED") // PROCESSED | FAILED | RETRIED
+  createdAt    DateTime    @default(now())
+}
+
 model ColonyDetection {
-  id            String   @id @default(cuid())
-  wellId        String
-  well          Well     @relation(fields: [wellId], references: [id])
-  detectedAt    DateTime @default(now())
-  confidence    Float
+  id             String   @id @default(cuid())
+  wellId         String
+  well           Well     @relation(fields: [wellId], references: [id])
+  detectedAt     DateTime @default(now())
+  confidence     Float
   growthVelocity Float?
-  cvProvider    String   // which cloud CV endpoint produced this
+  cvProvider     String   // which cloud CV endpoint produced this
 }
 
 model ElnReport {
+  id           String       @id @default(cuid())
+  experimentId String
+  experiment   Experiment   @relation(fields: [experimentId], references: [id])
+  format       ReportFormat // PDF | MARKDOWN | ISA_TAB | JSON
+  storageUrl   String
+  generatedAt  DateTime     @default(now())
+}
+
+model SystemMetric {
   id            String   @id @default(cuid())
-  experimentId  String
-  experiment    Experiment @relation(fields: [experimentId], references: [id])
-  format        ReportFormat // PDF | MARKDOWN | ISA_TAB | JSON
-  storageUrl    String
-  generatedAt   DateTime @default(now())
+  serverStatus  String   @default("HEALTHY")
+  heapUsedMb    Float
+  heapTotalMb   Float
+  rssMb         Float
+  uptimeSeconds Float
+  capturedAt    DateTime @default(now())
 }
 
 enum ExperimentStatus {
   ACTIVE
   COMPLETED
   ABORTED
+  ARCHIVED
+}
+
+enum PlateFormat {
+  WELL_24
+  WELL_48
+  WELL_96
+  WELL_384
 }
 
 enum EventType {
   VOICE_UTTERANCE
   INTENT
+  VOICE_INTENT
   FRAME_MARK
+  WELL_UPDATE
   STATE_CHANGE
+  COLONY_DETECTION
+  SYSTEM_METRIC
 }
 
 enum ReportFormat {

@@ -38,10 +38,10 @@ import { updateActiveState, type ActiveCoordinate } from '../services/state';
 const ResolvedIntentSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('MARK_WELL'),
-    plateLabel: z.string(),
-    plateId: z.string(),
-    wellCoordinate: z.string(),
-    wellId: z.string(),
+    plateLabel: z.string().optional(),
+    plateId: z.string().optional(),
+    wellCoordinate: z.string().optional(),
+    wellId: z.string().optional(),
   }),
   z.object({
     action: z.literal('ADD_TUBE'),
@@ -108,10 +108,10 @@ export const ingestVoiceIntent = createServerFn({ method: 'POST' })
     switch (data.intent.action) {
       case 'MARK_WELL': {
         const coord: ActiveCoordinate = {
-          plateLabel: data.intent.plateLabel,
-          plateId: data.intent.plateId,
-          wellCoordinate: data.intent.wellCoordinate,
-          wellId: data.intent.wellId,
+          plateLabel: data.intent.plateLabel ?? '',
+          plateId: data.intent.plateId ?? '',
+          wellCoordinate: data.intent.wellCoordinate ?? '',
+          wellId: data.intent.wellId ?? '',
         };
         updateActiveState(data.experimentId, { activeCoordinate: coord });
         break;
@@ -167,3 +167,71 @@ export const ingestFrameMark = createServerFn({ method: 'POST' })
       frameTimestamp: data.frameTimestamp,
     });
   });
+
+// ─── getExperimentEvents (#27) ──────────────────────────────────────────────
+
+const GetExperimentEventsSchema = z.object({
+  experimentId: z.string().min(1),
+  type: z.enum([
+    EventType.VOICE_UTTERANCE,
+    EventType.INTENT,
+    EventType.FRAME_MARK,
+    EventType.STATE_CHANGE,
+  ]).optional(),
+  limit: z.number().int().positive().max(1000).optional().default(200),
+  offset: z.number().int().nonnegative().optional().default(0),
+});
+
+type GetExperimentEventsInput = z.infer<typeof GetExperimentEventsSchema>;
+
+/**
+ * Streams or queries the append-only immutable TelemetryEvent log for an experiment.
+ *
+ * Module 8 (#27): `getExperimentEvents` → `{ experimentId, type, limit, offset }` → `TelemetryEvent[]`
+ */
+export const getExperimentEvents = createServerFn({ method: 'GET' })
+  .validator((data: unknown) => GetExperimentEventsSchema.parse(data))
+  .handler(async ({ data }: { data: GetExperimentEventsInput }) => {
+    const { getTelemetryEventsByExperiment } = await import('../db/repositories');
+    return getTelemetryEventsByExperiment(data.experimentId, {
+      type: data.type,
+      limit: data.limit,
+      offset: data.offset,
+    });
+  });
+
+// ─── logCompensatingEvent (#28) ─────────────────────────────────────────────
+
+const LogCompensatingEventSchema = z.object({
+  experimentId: z.string().min(1),
+  wellId: z.string().optional(),
+  reason: z.string().min(1, 'Reason for compensation must be specified'),
+  correctedPayload: z.record(z.unknown()),
+  originalEventId: z.string().optional(),
+});
+
+type LogCompensatingEventInput = z.infer<typeof LogCompensatingEventSchema>;
+
+/**
+ * Writes corrective compensating events to rectify user or operator errors
+ * without mutating or deleting historical rows (preserving immutable audit trails).
+ *
+ * Module 8 (#28): `logCompensatingEvent` → `{ experimentId, reason, correctedPayload }` → `TelemetryEvent`
+ */
+export const logCompensatingEvent = createServerFn({ method: 'POST' })
+  .validator((data: unknown) => LogCompensatingEventSchema.parse(data))
+  .handler(async ({ data }: { data: LogCompensatingEventInput }) => {
+    return logTelemetryEvent({
+      experimentId: data.experimentId,
+      wellId: data.wellId,
+      type: EventType.STATE_CHANGE,
+      rawPayload: {
+        isCompensatingEvent: true,
+        reason: data.reason,
+        originalEventId: data.originalEventId,
+        correction: data.correctedPayload,
+        compensatedAt: new Date().toISOString(),
+      } as Prisma.InputJsonValue,
+    });
+  });
+

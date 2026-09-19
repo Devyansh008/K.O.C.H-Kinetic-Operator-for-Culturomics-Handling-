@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { FlaskConical, Play, Square, X, Wifi, Clock } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
 import { useKoch } from '../../lib/mockState';
 
 function pad(n: number): string {
@@ -81,6 +82,14 @@ export function Header() {
 
       {/* Right: timer + controls */}
       <div className="flex items-center gap-3">
+        {/* Navigation to Test Bench */}
+        <Link 
+          to="/dev-testing" 
+          className="text-xs font-mono px-3 py-1.5 rounded bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 border border-amber-500/20 transition-colors"
+        >
+          ⚡ Open API Test Bench
+        </Link>
+        
         {/* Timer */}
         <div className="flex items-center gap-1.5 bg-lab-card border border-lab-border rounded-lg px-3 py-1.5">
           <Clock className="w-3.5 h-3.5 text-lab-subtext" />

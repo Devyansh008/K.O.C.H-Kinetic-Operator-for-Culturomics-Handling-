@@ -7,7 +7,11 @@
     "build": "vite build",
     "start": "node .output/server/index.mjs",
     "tw:watch": "tailwindcss -i ./src/styles.css -o ./public/styles.css --watch",
-    "tw:build": "tailwindcss -i ./src/styles.css -o ./public/styles.css --minify"
+    "tw:build": "tailwindcss -i ./src/styles.css -o ./public/styles.css --minify",
+    "test": "tsx test/integration/full-31-endpoints.test.ts",
+    "test:all": "tsx test/integration/full-31-endpoints.test.ts",
+    "test:backend": "tsx test/integration/koch-backend.test.ts",
+    "test:vitest": "vitest run"
   },
   "dependencies": {
     "@livekit/components-react": "^2.0.0",
@@ -39,6 +43,7 @@
     "typescript": "^5.0.0",
     "vinxi": "^0.5.11",
     "vite": "^8.3.0",
+    "vitest": "^5.0.1",
     "zod-prisma-types": "^2.0.0"
   },
   "type": "module"

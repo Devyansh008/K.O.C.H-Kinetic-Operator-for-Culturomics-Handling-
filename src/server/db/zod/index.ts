@@ -52,15 +52,21 @@ export const TransactionIsolationLevelSchema = z.enum(['ReadUncommitted','ReadCo
 
 export const ExperimentScalarFieldEnumSchema = z.enum(['id','name','startedAt','endedAt','status']);
 
-export const PlateScalarFieldEnumSchema = z.enum(['id','experimentId','label']);
+export const PlateScalarFieldEnumSchema = z.enum(['id','experimentId','label','format']);
 
-export const WellScalarFieldEnumSchema = z.enum(['id','plateId','coordinate']);
+export const WellScalarFieldEnumSchema = z.enum(['id','plateId','coordinate','status','media','opticalDensity','contents','notes']);
+
+export const WellStateScalarFieldEnumSchema = z.enum(['id','wellId','coordinate','plateId','status','media','opticalDensity','notes','updatedAt']);
 
 export const TelemetryEventScalarFieldEnumSchema = z.enum(['id','experimentId','wellId','type','rawPayload','frameTimestamp','createdAt']);
+
+export const VoiceIntentLogScalarFieldEnumSchema = z.enum(['id','experimentId','transcript','intent','confidence','status','createdAt']);
 
 export const ColonyDetectionScalarFieldEnumSchema = z.enum(['id','wellId','detectedAt','confidence','growthVelocity','cvProvider']);
 
 export const ElnReportScalarFieldEnumSchema = z.enum(['id','experimentId','format','storageUrl','generatedAt']);
+
+export const SystemMetricScalarFieldEnumSchema = z.enum(['id','serverStatus','heapUsedMb','heapTotalMb','rssMb','uptimeSeconds','capturedAt']);
 
 export const SortOrderSchema = z.enum(['asc','desc']);
 
@@ -76,7 +82,11 @@ export const ExperimentStatusSchema = z.enum(['ACTIVE','COMPLETED','ABORTED','AR
 
 export type ExperimentStatusType = `${z.infer<typeof ExperimentStatusSchema>}`
 
-export const EventTypeSchema = z.enum(['VOICE_UTTERANCE','INTENT','FRAME_MARK','STATE_CHANGE']);
+export const PlateFormatSchema = z.enum(['WELL_24','WELL_48','WELL_96','WELL_384']);
+
+export type PlateFormatType = `${z.infer<typeof PlateFormatSchema>}`
+
+export const EventTypeSchema = z.enum(['VOICE_UTTERANCE','INTENT','VOICE_INTENT','FRAME_MARK','WELL_UPDATE','STATE_CHANGE','COLONY_DETECTION','SYSTEM_METRIC']);
 
 export type EventTypeType = `${z.infer<typeof EventTypeSchema>}`
 
@@ -107,6 +117,7 @@ export type Experiment = z.infer<typeof ExperimentSchema>
 /////////////////////////////////////////
 
 export const PlateSchema = z.object({
+  format: PlateFormatSchema,
   id: z.string().cuid(),
   experimentId: z.string(),
   label: z.string(),
@@ -122,9 +133,32 @@ export const WellSchema = z.object({
   id: z.string().cuid(),
   plateId: z.string(),
   coordinate: z.string(),
+  status: z.string(),
+  media: z.string().nullable(),
+  opticalDensity: z.number().nullable(),
+  contents: z.string().nullable(),
+  notes: z.string().nullable(),
 })
 
 export type Well = z.infer<typeof WellSchema>
+
+/////////////////////////////////////////
+// WELL STATE SCHEMA
+/////////////////////////////////////////
+
+export const WellStateSchema = z.object({
+  id: z.string().cuid(),
+  wellId: z.string(),
+  coordinate: z.string(),
+  plateId: z.string(),
+  status: z.string(),
+  media: z.string().nullable(),
+  opticalDensity: z.number().nullable(),
+  notes: z.string().nullable(),
+  updatedAt: z.coerce.date(),
+})
+
+export type WellState = z.infer<typeof WellStateSchema>
 
 /////////////////////////////////////////
 // TELEMETRY EVENT SCHEMA
@@ -141,6 +175,22 @@ export const TelemetryEventSchema = z.object({
 })
 
 export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>
+
+/////////////////////////////////////////
+// VOICE INTENT LOG SCHEMA
+/////////////////////////////////////////
+
+export const VoiceIntentLogSchema = z.object({
+  id: z.string().cuid(),
+  experimentId: z.string(),
+  transcript: z.string(),
+  intent: InputJsonValue,
+  confidence: z.number(),
+  status: z.string(),
+  createdAt: z.coerce.date(),
+})
+
+export type VoiceIntentLog = z.infer<typeof VoiceIntentLogSchema>
 
 /////////////////////////////////////////
 // COLONY DETECTION SCHEMA
@@ -170,3 +220,19 @@ export const ElnReportSchema = z.object({
 })
 
 export type ElnReport = z.infer<typeof ElnReportSchema>
+
+/////////////////////////////////////////
+// SYSTEM METRIC SCHEMA
+/////////////////////////////////////////
+
+export const SystemMetricSchema = z.object({
+  id: z.string().cuid(),
+  serverStatus: z.string(),
+  heapUsedMb: z.number(),
+  heapTotalMb: z.number(),
+  rssMb: z.number(),
+  uptimeSeconds: z.number(),
+  capturedAt: z.coerce.date(),
+})
+
+export type SystemMetric = z.infer<typeof SystemMetricSchema>

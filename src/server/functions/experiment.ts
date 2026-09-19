@@ -17,8 +17,13 @@ import { z } from 'zod';
 
 import {
   createExperiment,
-  updateExperimentStatus,
+  getExperimentById,
+  listExperiments as dbListExperiments,
+  updateExperimentStatus as dbUpdateExperimentStatus,
+  archiveExperiment as dbArchiveExperiment,
   ExperimentStatus,
+  type ExperimentWithRelations,
+  type ListExperimentsResult,
 } from '../db/repositories';
 
 import {
@@ -28,7 +33,7 @@ import {
   type ActiveState,
 } from '../services/state';
 
-// ─── startExperiment ─────────────────────────────────────────────────────────
+// ─── startExperiment (#1) ───────────────────────────────────────────────────
 
 const StartExperimentSchema = z.object({
   /** Human-readable name for the experiment run (e.g. "Plate Run 2026-09-12") */
@@ -51,7 +56,108 @@ export const startExperiment = createServerFn({ method: 'POST' })
     return experiment;
   });
 
-// ─── getActiveState ───────────────────────────────────────────────────────────
+// ─── getExperiment (#2) ─────────────────────────────────────────────────────
+
+const GetExperimentSchema = z.object({
+  experimentId: z.string().min(1),
+});
+
+type GetExperimentInput = z.infer<typeof GetExperimentSchema>;
+
+/**
+ * Retrieves metadata, plates, wells, telemetry events, and ELN report details
+ * for a specific experiment ID.
+ *
+ * Module 1 (#2): `getExperiment` → `{ experimentId }` → `ExperimentWithRelations | null`
+ */
+export const getExperiment = createServerFn({ method: 'GET' })
+  .validator((data: unknown) => GetExperimentSchema.parse(data))
+  .handler(async ({ data }: { data: GetExperimentInput }): Promise<ExperimentWithRelations | null> => {
+    return getExperimentById(data.experimentId);
+  });
+
+// ─── listExperiments (#3) ───────────────────────────────────────────────────
+
+const ListExperimentsSchema = z.object({
+  page: z.number().int().positive().optional().default(1),
+  limit: z.number().int().positive().max(100).optional().default(20),
+  status: z.enum([
+    ExperimentStatus.ACTIVE,
+    ExperimentStatus.COMPLETED,
+    ExperimentStatus.ABORTED,
+    ExperimentStatus.ARCHIVED,
+  ]).optional(),
+  search: z.string().optional(),
+});
+
+type ListExperimentsInput = z.infer<typeof ListExperimentsSchema>;
+
+/**
+ * Paginated, status-filtered, and searchable listing of experiments.
+ *
+ * Module 1 (#3): `listExperiments` → `{ page, limit, status, search }` → `ListExperimentsResult`
+ */
+export const listExperiments = createServerFn({ method: 'GET' })
+  .validator((data: unknown) => ListExperimentsSchema.parse(data))
+  .handler(async ({ data }): Promise<ListExperimentsResult> => {
+    return dbListExperiments(data);
+  });
+
+// ─── updateExperimentStatus (#4) ───────────────────────────────────────────
+
+const UpdateExperimentStatusSchema = z.object({
+  experimentId: z.string().min(1),
+  status: z.enum([
+    ExperimentStatus.ACTIVE,
+    ExperimentStatus.COMPLETED,
+    ExperimentStatus.ABORTED,
+    ExperimentStatus.ARCHIVED,
+  ]),
+});
+
+type UpdateExperimentStatusInput = z.infer<typeof UpdateExperimentStatusSchema>;
+
+/**
+ * Updates run lifecycle state (ACTIVE → COMPLETED / ABORTED / ARCHIVED).
+ * Automatically handles in-memory active state clearing for non-ACTIVE transitions.
+ *
+ * Module 1 (#4): `updateExperimentStatus` → `{ experimentId, status }` → `Experiment`
+ */
+export const updateExperimentStatus = createServerFn({ method: 'POST' })
+  .validator((data: unknown) => UpdateExperimentStatusSchema.parse(data))
+  .handler(async ({ data }) => {
+    const updated = await dbUpdateExperimentStatus(data.experimentId, data.status);
+    if (data.status === ExperimentStatus.ACTIVE) {
+      initActiveState(data.experimentId);
+    } else {
+      clearActiveState(data.experimentId);
+    }
+    return updated;
+  });
+
+// ─── archiveExperiment (#5) ─────────────────────────────────────────────────
+
+const ArchiveExperimentSchema = z.object({
+  experimentId: z.string().min(1),
+  reason: z.string().optional(),
+});
+
+type ArchiveExperimentInput = z.infer<typeof ArchiveExperimentSchema>;
+
+/**
+ * Soft-archives completed or aborted experiment runs for long-term storage.
+ *
+ * Module 1 (#5): `archiveExperiment` → `{ experimentId, reason }` → `Experiment`
+ */
+export const archiveExperiment = createServerFn({ method: 'POST' })
+  .validator((data: unknown) => ArchiveExperimentSchema.parse(data))
+  .handler(async ({ data }) => {
+    const updated = await dbArchiveExperiment(data.experimentId);
+    clearActiveState(data.experimentId);
+    return updated;
+  });
+
+// ─── getActiveState (#29) ───────────────────────────────────────────────────
 
 const GetActiveStateSchema = z.object({
   experimentId: z.string().min(1),
@@ -63,7 +169,7 @@ type GetActiveStateInput = z.infer<typeof GetActiveStateSchema>;
  * Returns the current in-memory active state snapshot for an experiment.
  * Returns null if the experiment is unknown (e.g. after a cold restart).
  *
- * PRD §7: `getActiveState` → `{ experimentId }` → active-state snapshot
+ * Module 9 (#29): `getActiveState` → `{ experimentId }` → active-state snapshot
  */
 export const getActiveState = createServerFn({ method: 'GET' })
   .validator((data: unknown) => GetActiveStateSchema.parse(data))
@@ -71,7 +177,7 @@ export const getActiveState = createServerFn({ method: 'GET' })
     return getActiveStateSnapshot(data.experimentId);
   });
 
-// ─── endExperiment ────────────────────────────────────────────────────────────
+// ─── endExperiment (Convenience wrapper around updateExperimentStatus) ───────
 
 const EndExperimentSchema = z.object({
   experimentId: z.string().min(1),
@@ -89,13 +195,11 @@ type EndExperimentInput = z.infer<typeof EndExperimentSchema>;
 /**
  * Marks the experiment as COMPLETED (or ABORTED), clears the in-memory
  * active state entry, and returns the updated Experiment row.
- *
- * PRD §7: `endExperiment` → `{ experimentId }` → `Experiment`
  */
 export const endExperiment = createServerFn({ method: 'POST' })
   .validator((data: unknown) => EndExperimentSchema.parse(data))
   .handler(async ({ data }: { data: EndExperimentInput }) => {
-    const updated = await updateExperimentStatus(data.experimentId, data.status);
+    const updated = await dbUpdateExperimentStatus(data.experimentId, data.status);
     clearActiveState(data.experimentId);
     return updated;
   });
