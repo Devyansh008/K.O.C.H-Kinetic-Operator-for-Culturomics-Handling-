@@ -78,7 +78,7 @@ export const Stage1AudioTester: React.FC = () => {
     const canvas = canvasRef.current;
     const canvasCtx = canvas.getContext('2d');
     
-    let animationFrameId: number;
+    let animationFrameId: number = 0;
 
     const draw = () => {
       if (!canvasCtx) return;
@@ -102,7 +102,7 @@ export const Stage1AudioTester: React.FC = () => {
         const g = 250 * (i / dataArray.length);
         const b = 50;
 
-        canvasCtx.fillStyle = \`rgb(\${r},\${g},\${b})\`;
+        canvasCtx.fillStyle = `rgb(\${r},\${g},\${b})`;
         canvasCtx.fillRect(x, height - barHeight, barWidth, barHeight);
 
         x += barWidth + 1;
@@ -136,11 +136,11 @@ export const Stage1AudioTester: React.FC = () => {
         <div className="flex items-center space-x-4 p-4 bg-slate-800 rounded-lg border border-slate-700">
           <button
             onClick={isRecording ? stopRecording : startRecording}
-            className={\`px-6 py-2 rounded-md font-semibold transition-all duration-200 \${
+            className={`px-6 py-2 rounded-md font-semibold transition-all duration-200 \${
               isRecording 
                 ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/50'
                 : 'bg-teal-500/20 text-teal-400 hover:bg-teal-500/30 border border-teal-500/50'
-            }\`}
+            }`}
           >
             {isRecording ? 'Stop Recording' : 'Start Microphone'}
           </button>
@@ -152,14 +152,14 @@ export const Stage1AudioTester: React.FC = () => {
             <button
               onClick={() => toggleFilter(!isFiltering)}
               disabled={!isRecording}
-              className={\`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus:outline-none \${
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus:outline-none \${
                 isFiltering ? 'bg-teal-500' : 'bg-slate-600'
-              } \${!isRecording ? 'opacity-50 cursor-not-allowed' : ''}\`}
+              } \${!isRecording ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <span
-                className={\`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 \${
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 \${
                   isFiltering ? 'translate-x-6' : 'translate-x-1'
-                }\`}
+                }`}
               />
             </button>
             <span className="text-sm font-semibold text-teal-400">LMS Filtered</span>
@@ -170,10 +170,10 @@ export const Stage1AudioTester: React.FC = () => {
         <div className="grid grid-cols-2 gap-4">
           <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/50 flex flex-col">
             <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">Permission</span>
-            <span className={\`mt-1 font-medium \${
+            <span className={`mt-1 font-medium \${
               permissionStatus === 'granted' ? 'text-green-400' :
               permissionStatus === 'denied' ? 'text-red-400' : 'text-yellow-400'
-            }\`}>
+            }`}>
               {permissionStatus.toUpperCase()}
             </span>
           </div>
@@ -181,7 +181,7 @@ export const Stage1AudioTester: React.FC = () => {
           <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/50 flex flex-col">
             <span className="text-xs text-slate-500 uppercase font-bold tracking-wider">LiveKit Track Init</span>
             <span className="mt-1 font-medium text-blue-400">
-              {initTimeMs !== null ? \`\${initTimeMs.toFixed(2)} ms\` : 'Waiting...'}
+              {initTimeMs !== null ? `\${initTimeMs.toFixed(2)} ms` : 'Waiting...'}
             </span>
           </div>
         </div>
