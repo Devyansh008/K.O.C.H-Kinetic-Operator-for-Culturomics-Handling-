@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DevTestingRouteImport } from './routes/dev-testing'
 import { Route as LogsRouteImport } from './routes/logs'
 import { Route as VoiceRouteImport } from './routes/voice'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevTestingRoute = DevTestingRouteImport.update({
+  id: '/dev-testing',
+  path: '/dev-testing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LogsRoute = LogsRouteImport.update({
@@ -31,30 +37,34 @@ const VoiceRoute = VoiceRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dev-testing': typeof DevTestingRoute
   '/logs': typeof LogsRoute
   '/voice': typeof VoiceRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dev-testing': typeof DevTestingRoute
   '/logs': typeof LogsRoute
   '/voice': typeof VoiceRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dev-testing': typeof DevTestingRoute
   '/logs': typeof LogsRoute
   '/voice': typeof VoiceRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/logs' | '/voice'
+  fullPaths: '/' | '/dev-testing' | '/logs' | '/voice'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/logs' | '/voice'
-  id: '__root__' | '/' | '/logs' | '/voice'
+  to: '/' | '/dev-testing' | '/logs' | '/voice'
+  id: '__root__' | '/' | '/dev-testing' | '/logs' | '/voice'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DevTestingRoute: typeof DevTestingRoute
   LogsRoute: typeof LogsRoute
   VoiceRoute: typeof VoiceRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev-testing': {
+      id: '/dev-testing'
+      path: '/dev-testing'
+      fullPath: '/dev-testing'
+      preLoaderRoute: typeof DevTestingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/logs': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DevTestingRoute: DevTestingRoute,
   LogsRoute: LogsRoute,
   VoiceRoute: VoiceRoute,
 }
