@@ -11,43 +11,37 @@ import { Prisma } from '@prisma/client';
 export type NullableJsonInput = Prisma.JsonValue | null | 'JsonNull' | 'DbNull' | Prisma.NullTypes.DbNull | Prisma.NullTypes.JsonNull;
 
 export const transformJsonNull = (v?: NullableJsonInput) => {
-  if (!v || v === 'DbNull') return Prisma.NullTypes.DbNull;
-  if (v === 'JsonNull') return Prisma.NullTypes.JsonNull;
+  if (!v || v === 'DbNull') return Prisma.DbNull;
+  if (v === 'JsonNull') return Prisma.JsonNull;
   return v;
 };
 
-export const JsonValueSchema: z.ZodType<Prisma.JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.literal(null),
-    z.record(z.string(), z.lazy(() => JsonValueSchema.optional())),
-    z.array(z.lazy(() => JsonValueSchema)),
-  ])
-);
+export const JsonValue: z.ZodType<Prisma.JsonValue> = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.lazy(() => z.array(JsonValue)),
+  z.lazy(() => z.record(JsonValue)),
+]);
 
-export type JsonValueType = z.infer<typeof JsonValueSchema>;
+export type JsonValueType = z.infer<typeof JsonValue>;
 
 export const NullableJsonValue = z
-  .union([JsonValueSchema, z.literal('DbNull'), z.literal('JsonNull')])
+  .union([JsonValue, z.literal('DbNull'), z.literal('JsonNull')])
   .nullable()
   .transform((v) => transformJsonNull(v));
 
 export type NullableJsonValueType = z.infer<typeof NullableJsonValue>;
 
-export const InputJsonValueSchema: z.ZodType<Prisma.InputJsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.object({ toJSON: z.any() }),
-    z.record(z.string(), z.lazy(() => z.union([InputJsonValueSchema, z.literal(null)]))),
-    z.array(z.lazy(() => z.union([InputJsonValueSchema, z.literal(null)]))),
-  ])
-);
+export const InputJsonValue: z.ZodType<Prisma.InputJsonValue> = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.lazy(() => z.array(InputJsonValue.nullable())),
+  z.lazy(() => z.record(InputJsonValue.nullable())),
+]);
 
-export type InputJsonValueType = z.infer<typeof InputJsonValueSchema>;
+export type InputJsonValueType = z.infer<typeof InputJsonValue>;
 
 
 /////////////////////////////////////////
@@ -76,13 +70,13 @@ export const SystemMetricScalarFieldEnumSchema = z.enum(['id','serverStatus','he
 
 export const SortOrderSchema = z.enum(['asc','desc']);
 
-export const JsonNullValueInputSchema: z.ZodType<Prisma.JsonNullValueInput> = z.enum(['JsonNull',]).transform((value) => (value === 'JsonNull' ? Prisma.JsonNull : value));
+export const JsonNullValueInputSchema = z.enum(['JsonNull',]);
 
 export const QueryModeSchema = z.enum(['default','insensitive']);
 
 export const NullsOrderSchema = z.enum(['first','last']);
 
-export const JsonNullValueFilterSchema: z.ZodType<Prisma.JsonNullValueFilter> = z.enum(['DbNull','JsonNull','AnyNull',]).transform((value) => value === 'JsonNull' ? Prisma.JsonNull : value === 'DbNull' ? Prisma.DbNull : value === 'AnyNull' ? Prisma.AnyNull : value);
+export const JsonNullValueFilterSchema = z.enum(['DbNull','JsonNull','AnyNull',]);
 
 export const ExperimentStatusSchema = z.enum(['ACTIVE','COMPLETED','ABORTED','ARCHIVED']);
 
@@ -175,7 +169,7 @@ export const TelemetryEventSchema = z.object({
   id: z.string().cuid(),
   experimentId: z.string(),
   wellId: z.string().nullable(),
-  rawPayload: JsonValueSchema,
+  rawPayload: InputJsonValue,
   frameTimestamp: z.coerce.date().nullable(),
   createdAt: z.coerce.date(),
 })
@@ -190,7 +184,7 @@ export const VoiceIntentLogSchema = z.object({
   id: z.string().cuid(),
   experimentId: z.string(),
   transcript: z.string(),
-  intent: JsonValueSchema,
+  intent: InputJsonValue,
   confidence: z.number(),
   status: z.string(),
   createdAt: z.coerce.date(),

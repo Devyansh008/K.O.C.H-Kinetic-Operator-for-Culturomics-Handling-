@@ -134,12 +134,12 @@ async function callFn<TInput, TOutput>(
     if (typeof serverFn?.__executeServer === 'function') {
       const res: any = await serverFn.__executeServer({
         method: serverFn.method || 'POST',
-        data,
+        data: { data },
       });
       if (res?.error) {
         throw res.error;
       }
-      return res?.result;
+      return res?.result !== undefined ? res.result : res;
     }
     return await serverFn({ data });
   });

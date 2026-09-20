@@ -56,7 +56,7 @@ export function resolveIntent(transcript: string): ResolvedIntentPayload {
   const t = transcript.trim().toLowerCase();
 
   // MARK_WELL: "mark plate 4 well C7"
-  const markWellMatch = t.match(/mark\s+plate\s+(\S+)\s+well\s+([a-h]\d+)/i);
+  const markWellMatch = t.match(/mark\s+plate\s+(\S+)\s+well\s+([a-p]\d+)/i);
   if (markWellMatch) {
     return {
       action: 'MARK_WELL_PENDING',
@@ -76,6 +76,23 @@ export function resolveIntent(transcript: string): ResolvedIntentPayload {
     return { action: 'START_TIMER' };
   }
 
+  // Microbiology Lexicon
+  if (t.includes('od600')) {
+    return { action: 'RECORD_OD600' };
+  }
+
+  if (t.includes('akkermansia')) {
+    return { action: 'ADD_CULTURE', culture: 'Akkermansia' };
+  }
+
+  if (t.includes('anaerobic')) {
+    return { action: 'SET_ENVIRONMENT', environment: 'anaerobic' };
+  }
+
+  if (t.includes('5% co2')) {
+    return { action: 'SET_ENVIRONMENT', environment: '5% CO2' };
+  }
+
   return { action: 'UNKNOWN', raw: transcript };
 }
 
@@ -84,6 +101,9 @@ type ResolvedIntentPayload =
   | { action: 'MARK_WELL_PENDING'; plateLabel: string; wellCoordinate: string }
   | { action: 'ADD_TUBE'; tubeId: string }
   | { action: 'START_TIMER' }
+  | { action: 'RECORD_OD600' }
+  | { action: 'ADD_CULTURE'; culture: string }
+  | { action: 'SET_ENVIRONMENT'; environment: string }
   | { action: 'UNKNOWN'; raw: string };
 
 // ─── Webhook payload schema ───────────────────────────────────────────────────

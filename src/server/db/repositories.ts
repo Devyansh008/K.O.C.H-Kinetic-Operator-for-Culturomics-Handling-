@@ -19,6 +19,7 @@ import {
   type Plate,
   type Well,
   type TelemetryEvent,
+  type VoiceIntentLog,
   type ColonyDetection,
   type ElnReport,
   type Prisma,
@@ -413,18 +414,29 @@ export async function getTelemetryEventsByExperiment(
   });
 }
 
+export interface CreateVoiceIntentLogInput {
+  experimentId: string;
+  transcript: string;
+  intent: Prisma.InputJsonValue;
+  confidence?: number;
+  status?: string;
+}
+
+export async function createVoiceIntentLog(data: CreateVoiceIntentLogInput): Promise<VoiceIntentLog> {
+  return prisma.voiceIntentLog.create({
+    data,
+  });
+}
+
 /**
- * Queries voice command history for an experiment (VOICE_UTTERANCE and INTENT events).
+ * Queries voice command history for an experiment from VoiceIntentLog.
  */
 export async function getVoiceAuditEvents(
   experimentId: string,
   options: { limit?: number; offset?: number } = {},
-): Promise<TelemetryEvent[]> {
-  return prisma.telemetryEvent.findMany({
-    where: {
-      experimentId,
-      type: { in: [EventType.VOICE_UTTERANCE, EventType.INTENT] },
-    },
+): Promise<VoiceIntentLog[]> {
+  return prisma.voiceIntentLog.findMany({
+    where: { experimentId },
     orderBy: { createdAt: 'desc' },
     take: options.limit ? Math.min(500, options.limit) : 50,
     skip: options.offset,

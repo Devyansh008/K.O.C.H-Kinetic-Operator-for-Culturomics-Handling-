@@ -12,10 +12,12 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
+import { AccessToken } from 'livekit-server-sdk';
 
 import {
   getVoiceAuditEvents,
   logTelemetryEvent,
+  createVoiceIntentLog,
   EventType,
 } from '../db/repositories';
 
@@ -74,32 +76,25 @@ export const getVoiceAuditLogs = createServerFn({ method: 'GET' })
     let confidenceCount = 0;
 
     let entries: VoiceAuditEntry[] = rawEvents.map((ev) => {
-      const payload = (typeof ev.rawPayload === 'object' && ev.rawPayload !== null)
-        ? (ev.rawPayload as Record<string, unknown>)
+      const intentPayload = (typeof ev.intent === 'object' && ev.intent !== null)
+        ? (ev.intent as Record<string, unknown>)
         : {};
 
-      const transcript = typeof payload.transcript === 'string' ? payload.transcript : undefined;
-      const action = typeof payload.action === 'string' ? payload.action : undefined;
+      const action = typeof intentPayload.action === 'string' ? intentPayload.action : undefined;
       
-      // Compute heuristic confidence score based on resolved intent
-      let confidence = 0.95;
-      if (action === 'UNKNOWN') {
-        confidence = 0.35;
-      } else if (action === 'MARK_WELL_PENDING' || action === 'MARK_WELL') {
-        confidence = 0.98;
-      }
+      const confidence = ev.confidence ?? 1.0;
       totalConfidence += confidence;
       confidenceCount++;
 
       return {
         id: ev.id,
-        type: ev.type,
+        type: 'VOICE_INTENT',
         createdAt: ev.createdAt.toISOString(),
-        transcript,
+        transcript: ev.transcript,
         action,
         confidenceScore: confidence,
         wordErrorRateEstimate: action === 'UNKNOWN' ? 0.45 : 0.02,
-        rawPayload: ev.rawPayload,
+        rawPayload: ev.intent,
       };
     });
 
@@ -164,6 +159,14 @@ export const retryFailedUtterance = createServerFn({ method: 'POST' })
       frameTimestamp,
     });
 
+    await createVoiceIntentLog({
+      experimentId: expId,
+      transcript: transcriptText,
+      intent: resolved as Prisma.InputJsonValue,
+      confidence: 1.0,
+      status: 'RETRIED',
+    });
+
     // 3. Update active state if applicable
     if (resolved.action === 'MARK_WELL_PENDING' && 'plateLabel' in resolved && 'wellCoordinate' in resolved) {
       const partialCoord: ActiveCoordinate = {
@@ -214,13 +217,22 @@ export const streamVoiceSession = createServerFn({ method: 'GET' })
     const livekitHost = process.env.LIVEKIT_URL ?? 'wss://livekit.cloud.local';
     const isLiveKitConfigured = Boolean(process.env.LIVEKIT_API_SECRET && process.env.LIVEKIT_API_KEY);
 
-    // Deterministic session token generation for client connection
-    const tokenPayload = {
-      room: roomName,
-      sub: data.participantIdentity,
-      exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour
-    };
-    const sessionToken = `mock-livekit-jwt.${Buffer.from(JSON.stringify(tokenPayload)).toString('base64')}.signed`;
+    let sessionToken = '';
+    if (isLiveKitConfigured) {
+      const at = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, {
+        identity: data.participantIdentity,
+        ttl: 3600, // 1 hour
+      });
+      at.addGrant({ roomJoin: true, room: roomName });
+      sessionToken = await at.toJwt();
+    } else {
+      const tokenPayload = {
+        room: roomName,
+        sub: data.participantIdentity,
+        exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour
+      };
+      sessionToken = `mock-livekit-jwt.${Buffer.from(JSON.stringify(tokenPayload)).toString('base64')}.signed`;
+    }
 
     return {
       sessionToken,

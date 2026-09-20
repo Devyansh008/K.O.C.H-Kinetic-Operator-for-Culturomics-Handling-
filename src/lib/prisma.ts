@@ -442,7 +442,8 @@ function createInMemoryPrisma(): PrismaClient {
 }
 
 function createPrismaClient(): PrismaClient {
-  if (!process.env.DATABASE_URL) {
+  if (!process.env.DATABASE_URL || !process.env.DATABASE_URL.startsWith('postgres')) {
+    console.warn("Using In-Memory Prisma Client because DATABASE_URL is missing or not a Postgres URL.");
     return createInMemoryPrisma();
   }
 

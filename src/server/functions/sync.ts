@@ -62,6 +62,7 @@ export interface FlushResult {
 export const flushBufferedEvents = createServerFn({ method: 'POST' })
   .validator((data: unknown) => FlushBufferedEventsSchema.parse(data))
   .handler(async ({ data }: { data: FlushBufferedEventsInput }): Promise<FlushResult> => {
+    console.log('--- FLUSH HANDLER CALLED ---', data);
     const defaultExpId = data.experimentId ?? data.events[0]?.experimentId ?? 'exp_offline_flush';
 
     // Normalize timestamps and sort to guarantee temporal ordering

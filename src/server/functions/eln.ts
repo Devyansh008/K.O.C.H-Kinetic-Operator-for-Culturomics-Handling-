@@ -100,21 +100,17 @@ export const downloadElnReport = createServerFn({ method: 'GET' })
       };
     }
 
-    const compiled = await compileElnDocument(data.experimentId, data.format);
-    const ext = data.format === 'PDF' ? 'pdf' : 'md';
-    const mimeType = data.format === 'PDF' ? 'application/pdf' : 'text/markdown; charset=utf-8';
-    const filename = `koch_eln_${data.experimentId}_${Date.now()}.${ext}`;
-
+    // Default to markdown/pdf
+    const compiled = await compileElnDocument(data.experimentId, data.format as 'PDF' | 'MARKDOWN');
     return {
       format: data.format,
       content: compiled.content,
-      mimeType,
-      filename,
-      sizeBytes: Buffer.byteLength(compiled.content, data.format === 'PDF' ? 'base64' : 'utf8'),
+      mimeType: data.format === 'PDF' ? 'application/pdf' : 'text/markdown',
+      filename: `koch_report_${data.experimentId}.${data.format === 'PDF' ? 'pdf' : 'md'}`,
+      sizeBytes: Buffer.byteLength(compiled.content, 'utf8'),
       storageUrl: compiled.storageUrl,
     };
   });
-
 
 // ─── exportStandardized ───────────────────────────────────────────────────────
 

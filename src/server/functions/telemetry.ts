@@ -20,13 +20,18 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 
 import {
+  getTelemetryEventsByExperiment,
+  getVoiceAuditEvents,
   logTelemetryEvent,
+  createVoiceIntentLog,
   EventType,
 } from '../db/repositories';
 
-import { updateActiveState, type ActiveCoordinate } from '../services/state';
+import { updateActiveState, getActiveStateSnapshot, type ActiveCoordinate } from '../services/state';
+import { generateConfirmationPhrase } from '../services/tts-pipeline';
+import { resetPlaybackState, streamTTSChunks } from './tts-bargein';
 
-// ─── ingestVoiceIntent ────────────────────────────────────────────────────────
+// ─── ingestVoiceIntent ────────────────────────────────────────────────        
 
 /**
  * Structured intent payload resolved from an operator voice utterance.
@@ -35,12 +40,14 @@ import { updateActiveState, type ActiveCoordinate } from '../services/state';
  * Example: "Mark plate 4 well C7" →
  *   { action: "MARK_WELL", plateLabel: "Plate 4", plateId: "...", wellCoordinate: "C7", wellId: "..." }
  */
+const WellCoordinateSchema = z.string().regex(/^[A-P]([1-9]|1[0-9]|2[0-4])$/i, 'Invalid well coordinate');
+
 const ResolvedIntentSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('MARK_WELL'),
     plateLabel: z.string().optional(),
     plateId: z.string().optional(),
-    wellCoordinate: z.string().optional(),
+    wellCoordinate: WellCoordinateSchema.optional(),
     wellId: z.string().optional(),
   }),
   z.object({
@@ -49,6 +56,17 @@ const ResolvedIntentSchema = z.discriminatedUnion('action', [
   }),
   z.object({
     action: z.literal('START_TIMER'),
+  }),
+  z.object({
+    action: z.literal('RECORD_OD600'),
+  }),
+  z.object({
+    action: z.literal('ADD_CULTURE'),
+    culture: z.string(),
+  }),
+  z.object({
+    action: z.literal('SET_ENVIRONMENT'),
+    environment: z.string(),
   }),
   z.object({
     action: z.literal('UNKNOWN'),
@@ -87,6 +105,12 @@ export const ingestVoiceIntent = createServerFn({ method: 'POST' })
   .handler(async ({ data }: { data: IngestVoiceIntentInput }) => {
     const now = data.frameTimestamp ?? new Date();
 
+    await createVoiceIntentLog({
+      experimentId: data.experimentId,
+      transcript: data.transcript,
+      intent: data.intent as Prisma.InputJsonValue,
+    });
+
     // 1. Log raw utterance
     await logTelemetryEvent({
       experimentId: data.experimentId,
@@ -103,6 +127,9 @@ export const ingestVoiceIntent = createServerFn({ method: 'POST' })
       frameTimestamp: now,
       wellId: data.intent.action === 'MARK_WELL' ? data.intent.wellId : undefined,
     });
+
+    const currentState = getActiveStateSnapshot(data.experimentId);
+    const timerMark = new Date().toISOString();
 
     // 3. Update active state based on resolved intent
     switch (data.intent.action) {
@@ -124,15 +151,93 @@ export const ingestVoiceIntent = createServerFn({ method: 'POST' })
       }
       case 'START_TIMER': {
         updateActiveState(data.experimentId, {
-          timerMarks: [new Date().toISOString()],
+          timerMarks: [...(currentState.timerMarks ?? []), timerMark],
         });
         break;
       }
+      case 'UNKNOWN':
       default:
+        // No state mutation
         break;
     }
 
+    // 4. Trigger TTS Confirmation Pipeline
+    const confirmationPhrase = generateConfirmationPhrase(data.intent as ResolvedIntent);
+    resetPlaybackState(data.experimentId);
+
+    // Fire-and-forget the streaming audio generator
+    (async () => {
+      try {
+        const stream = streamTTSChunks(data.experimentId, confirmationPhrase);
+        for await (const chunk of stream) {
+          // In a real environment, send `chunk` to WebSocket/WebRTC client
+        }
+      } catch (err) {
+        console.error('TTS Stream error:', err);
+      }
+    })();
+
     return intentEvent;
+  });
+
+// ─── getExperimentEvents (#27) ──────────────────────────────────────────────
+
+const GetExperimentEventsSchema = z.object({
+  experimentId: z.string().min(1),
+});
+
+/**
+ * Queries and streams the full chronological TelemetryEvent and VoiceIntentLog sequence.
+ */
+export const getExperimentEvents = createServerFn({ method: 'GET' })
+  .validator((data: unknown) => GetExperimentEventsSchema.parse(data))
+  .handler(async ({ data }) => {
+    const [telemetry, intents] = await Promise.all([
+      getTelemetryEventsByExperiment(data.experimentId, { limit: 1000 }),
+      getVoiceAuditEvents(data.experimentId, { limit: 1000 }),
+    ]);
+
+    const combined = [
+      ...telemetry.map(t => ({ ...t, _eventType: 'telemetry' })),
+      ...intents.map(i => ({ ...i, _eventType: 'intentLog' })),
+    ];
+
+    // Interleave by chronological timestamp
+    combined.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+    return {
+      experimentId: data.experimentId,
+      totalEvents: combined.length,
+      events: combined,
+    };
+  });
+
+// ─── logCompensatingEvent (#28) ─────────────────────────────────────────────
+
+const LogCompensatingEventSchema = z.object({
+  experimentId: z.string().min(1),
+  targetEventId: z.string().min(1),
+  correctionPayload: z.record(z.unknown()),
+});
+
+/**
+ * Appends a corrective record without updating or deleting any historical database rows.
+ * Provides immutable auditing of intent overrides or offline reconciliation corrections.
+ */
+export const logCompensatingEvent = createServerFn({ method: 'POST' })
+  .validator((data: unknown) => LogCompensatingEventSchema.parse(data))
+  .handler(async ({ data }) => {
+    const event = await logTelemetryEvent({
+      experimentId: data.experimentId,
+      type: EventType.STATE_CHANGE,
+      rawPayload: {
+        isCorrection: true,
+        targetEventId: data.targetEventId,
+        correction: data.correctionPayload,
+      } as Prisma.InputJsonValue,
+    });
+
+    return event;
   });
 
 // ─── ingestFrameMark ─────────────────────────────────────────────────────────
@@ -165,73 +270,6 @@ export const ingestFrameMark = createServerFn({ method: 'POST' })
       type: EventType.FRAME_MARK,
       rawPayload: { frameTimestamp: data.frameTimestamp.toISOString() } as Prisma.InputJsonValue,
       frameTimestamp: data.frameTimestamp,
-    });
-  });
-
-// ─── getExperimentEvents (#27) ──────────────────────────────────────────────
-
-const GetExperimentEventsSchema = z.object({
-  experimentId: z.string().min(1),
-  type: z.enum([
-    EventType.VOICE_UTTERANCE,
-    EventType.INTENT,
-    EventType.FRAME_MARK,
-    EventType.STATE_CHANGE,
-  ]).optional(),
-  limit: z.number().int().positive().max(1000).optional().default(200),
-  offset: z.number().int().nonnegative().optional().default(0),
-});
-
-type GetExperimentEventsInput = z.infer<typeof GetExperimentEventsSchema>;
-
-/**
- * Streams or queries the append-only immutable TelemetryEvent log for an experiment.
- *
- * Module 8 (#27): `getExperimentEvents` → `{ experimentId, type, limit, offset }` → `TelemetryEvent[]`
- */
-export const getExperimentEvents = createServerFn({ method: 'GET' })
-  .validator((data: unknown) => GetExperimentEventsSchema.parse(data))
-  .handler(async ({ data }: { data: GetExperimentEventsInput }) => {
-    const { getTelemetryEventsByExperiment } = await import('../db/repositories');
-    return getTelemetryEventsByExperiment(data.experimentId, {
-      type: data.type,
-      limit: data.limit,
-      offset: data.offset,
-    });
-  });
-
-// ─── logCompensatingEvent (#28) ─────────────────────────────────────────────
-
-const LogCompensatingEventSchema = z.object({
-  experimentId: z.string().min(1),
-  wellId: z.string().optional(),
-  reason: z.string().min(1, 'Reason for compensation must be specified'),
-  correctedPayload: z.record(z.unknown()),
-  originalEventId: z.string().optional(),
-});
-
-type LogCompensatingEventInput = z.infer<typeof LogCompensatingEventSchema>;
-
-/**
- * Writes corrective compensating events to rectify user or operator errors
- * without mutating or deleting historical rows (preserving immutable audit trails).
- *
- * Module 8 (#28): `logCompensatingEvent` → `{ experimentId, reason, correctedPayload }` → `TelemetryEvent`
- */
-export const logCompensatingEvent = createServerFn({ method: 'POST' })
-  .validator((data: unknown) => LogCompensatingEventSchema.parse(data))
-  .handler(async ({ data }: { data: LogCompensatingEventInput }) => {
-    return logTelemetryEvent({
-      experimentId: data.experimentId,
-      wellId: data.wellId,
-      type: EventType.STATE_CHANGE,
-      rawPayload: {
-        isCompensatingEvent: true,
-        reason: data.reason,
-        originalEventId: data.originalEventId,
-        correction: data.correctedPayload,
-        compensatedAt: new Date().toISOString(),
-      } as Prisma.InputJsonValue,
     });
   });
 
