@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    include: ['test/integration/0*.test.ts'],
+    include: ['test/integration/0*.test.ts', 'test/integration/voice-assistant.test.ts'],
     testTimeout: 30000,
   },
 });

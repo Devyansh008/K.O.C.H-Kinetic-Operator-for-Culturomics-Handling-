@@ -23,7 +23,7 @@ import {
 
 import {
   resolveIntent,
-} from '../webhooks/voice-pipeline';
+} from '../services/intentResolver';
 
 import {
   updateActiveState,
@@ -243,3 +243,16 @@ export const streamVoiceSession = createServerFn({ method: 'GET' })
       livekitAvailable: isLiveKitConfigured,
     };
   });
+
+// ─── Voice Assistant Functions ──────────────────────────────────────────────
+
+export {
+  getAssemblyAiToken,
+  generateAssistantReply,
+  handleGetAssemblyAiToken,
+  handleGenerateAssistantReply,
+  type AssemblyAiTokenResult,
+  type AssistantReplyResult,
+  type GenerateAssistantReplyInput,
+} from './voice-assistant';
+
