@@ -81,8 +81,8 @@ describe('Pillar 2: Immutable Event Stream & Persistence Tests', () => {
     // 2. Log compensating event to correct human operator error
     const compensating = await callFn<any, any>(logCompensatingEvent, {
       experimentId: experiment.id,
-      reason: 'Operator misidentified well coordinate C7 instead of C8',
-      correctedPayload: { activeCoordinate: 'C8', correctedFromEventId: initialEvent.id },
+      targetEventId: initialEvent.id,
+      correctionPayload: { reason: 'Operator misidentified well coordinate C7 instead of C8', activeCoordinate: 'C8' },
     });
 
     expect(compensating.type).toBe(EventType.STATE_CHANGE);
@@ -92,10 +92,10 @@ describe('Pillar 2: Immutable Event Stream & Persistence Tests', () => {
       experimentId: experiment.id,
     });
 
-    expect(events.length).toBe(2);
-    expect(events[0].id).toBe(initialEvent.id);
-    expect((events[0].rawPayload as any).activeCoordinate).toBe('C7');
-    expect((events[1].rawPayload as any).correction.activeCoordinate).toBe('C8');
-    expect((events[1].rawPayload as any).reason).toContain('Operator misidentified');
+    expect(events.events.length).toBe(2);
+    expect(events.events[0].id).toBe(initialEvent.id);
+    expect((events.events[0].rawPayload as any).activeCoordinate).toBe('C7');
+    expect((events.events[1].rawPayload as any).correction.activeCoordinate).toBe('C8');
+    expect((events.events[1].rawPayload as any).reason).toContain('Operator misidentified');
   });
 });

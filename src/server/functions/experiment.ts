@@ -52,6 +52,7 @@ export const startExperiment = createServerFn({ method: 'POST' })
   .validator((data: unknown) => StartExperimentSchema.parse(data))
   .handler(async ({ data }: { data: StartExperimentInput }) => {
     const experiment = await createExperiment(data.name);
+    console.log('DEBUG startExperiment created experiment', experiment);
     initActiveState(experiment.id);
     return experiment;
   });

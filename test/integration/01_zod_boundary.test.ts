@@ -190,14 +190,14 @@ describe('Pillar 1: Zod Boundary & Runtime Validation Tests', () => {
   });
 
   it('Module 8: validates telemetry event queries and compensating events', async () => {
-    // Empty reason for compensating event
+    // Empty targetEventId for compensating event
     await expect(
-      callFn(logCompensatingEvent, { experimentId: 'exp_1', reason: '', correctedPayload: {} }),
+      callFn(logCompensatingEvent, { experimentId: 'exp_1', targetEventId: '', correctionPayload: {} }),
     ).rejects.toThrow();
 
-    // Invalid limit (> 1000 or negative)
+    // Invalid correction payload
     await expect(
-      callFn(getExperimentEvents, { experimentId: 'exp_1', limit: 5000 }),
+      callFn(logCompensatingEvent, { experimentId: 'exp_1', targetEventId: 'evt_1' }),
     ).rejects.toThrow();
   });
 

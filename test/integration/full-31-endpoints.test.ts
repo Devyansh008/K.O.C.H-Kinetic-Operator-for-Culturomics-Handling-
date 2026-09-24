@@ -134,7 +134,7 @@ async function callFn<TInput, TOutput>(
     if (typeof serverFn?.__executeServer === 'function') {
       const res: any = await serverFn.__executeServer({
         method: serverFn.method || 'POST',
-        data: { data },
+        data,
       });
       if (res?.error) {
         throw res.error;
@@ -157,6 +157,7 @@ async function runAll31EndpointsTest(): Promise<void> {
   // #1: startExperiment
   const expName = `E2E Culturomics Run ${Date.now()}`;
   const experiment = await callFn<any, any>(startExperiment, { name: expName });
+  console.log('DEBUG experiment returned', experiment);
   assert(experiment && experiment.id.length > 0, '#1 startExperiment - created experiment with ID');
   assert(experiment.status === ExperimentStatus.ACTIVE, '#1 startExperiment - initial status is ACTIVE');
 
