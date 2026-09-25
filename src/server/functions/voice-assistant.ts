@@ -16,6 +16,8 @@ import type { Prisma } from '@prisma/client';
 import { resolveIntent } from '../services/intentResolver';
 import { logTelemetryEvent, EventType } from '../db/repositories';
 import { updateActiveState, type ActiveCoordinate } from '../services/state';
+import { chat } from '@tanstack/ai';
+import { createGeminiChat } from '@tanstack/ai-gemini';
 
 // ─── AssemblyAI Real-Time Token ──────────────────────────────────────────────
 
@@ -161,41 +163,30 @@ export async function handleGenerateAssistantReply(
         'The operator is speaking hands-free in the lab. Respond in a concise, scientific, and clear manner (1-2 sentences maximum, under 30 words).\n' +
         `Recognized lab intent: ${resolved.action}. Provide confirmation of actions or answer questions crisply.`;
 
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: 'user',
-                parts: [{ text: `${systemPrompt}\n\nOperator: "${data.transcript}"` }],
-              },
-            ],
-            generationConfig: {
-              maxOutputTokens: 100,
-              temperature: 0.3,
-            },
-          }),
-        },
-      );
+      // Create Gemini adapter using @tanstack/ai-gemini
+      const adapter = createGeminiChat('gemini-2.5-flash', geminiApiKey);
 
-      if (geminiRes.ok) {
-        const geminiData = (await geminiRes.json()) as any;
-        const candidateText =
-          geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        if (candidateText) {
-          return {
-            replyText: candidateText,
-            source: 'gemini',
-            intent: { action: resolved.action, details: resolved as Record<string, unknown> },
-            actionExecuted,
-          };
-        }
+      // Use @tanstack/ai chat function
+      const result = await chat({
+        adapter,
+        systemPrompts: [systemPrompt],
+        messages: [
+          { role: 'user', content: `Operator: "${data.transcript}"` },
+        ],
+        stream: false,
+      });
+
+      const candidateText = result.trim();
+      if (candidateText) {
+        return {
+          replyText: candidateText,
+          source: 'gemini',
+          intent: { action: resolved.action, details: resolved as Record<string, unknown> },
+          actionExecuted,
+        };
       }
     } catch (err) {
-      console.warn('[generateAssistantReply] Gemini API request failed, falling back to rule engine:', err);
+      console.warn('[generateAssistantReply] Gemini API request failed via @tanstack/ai, falling back to rule engine:', err);
     }
   }
 

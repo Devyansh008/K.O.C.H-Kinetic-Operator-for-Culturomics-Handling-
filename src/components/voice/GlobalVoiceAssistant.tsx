@@ -26,7 +26,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react';
-import { useVoiceAssistant } from '../../hooks/useVoiceAssistant';
+import { useVoiceAssistant, type AssistantStatus } from '../../hooks/useVoiceAssistant';
 
 const QUICK_COMMANDS = [
   'Mark plate 4 well C7 positive',
@@ -35,6 +35,58 @@ const QUICK_COMMANDS = [
   'Start incubation protocol timer',
   'Status of culturomics session',
 ];
+
+interface StatusConfig {
+  label: string;
+  color: string;
+  bg: string;
+  dot: string;
+}
+
+const STATUS_CONFIG: Record<AssistantStatus, StatusConfig> = {
+  IDLE: {
+    label: 'Voice Standby',
+    color: 'text-lab-muted',
+    bg: 'bg-zinc-800/60 border-zinc-700',
+    dot: 'bg-zinc-500',
+  },
+  LISTENING_WAKEWORD: {
+    label: "Say 'Hey KOCH'",
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-950/40 border-emerald-500/40',
+    dot: 'bg-emerald-400 animate-pulse',
+  },
+  HEARD_WAKEWORD: {
+    label: 'Wake Word Detected',
+    color: 'text-cyan-300',
+    bg: 'bg-cyan-950/60 border-cyan-400',
+    dot: 'bg-cyan-300 animate-ping',
+  },
+  LISTENING_SPEECH: {
+    label: 'Streaming Speech',
+    color: 'text-teal-300',
+    bg: 'bg-teal-950/60 border-teal-400/60 shadow-[0_0_15px_rgba(20,184,166,0.25)]',
+    dot: 'bg-teal-400 animate-pulse',
+  },
+  GENERATING_REPLY: {
+    label: 'K.O.C.H. AI Thinking…',
+    color: 'text-indigo-300',
+    bg: 'bg-indigo-950/60 border-indigo-400/60',
+    dot: 'bg-indigo-400 animate-spin',
+  },
+  SPEAKING: {
+    label: 'Speaking Response',
+    color: 'text-amber-300',
+    bg: 'bg-amber-950/60 border-amber-400/60',
+    dot: 'bg-amber-400 animate-bounce',
+  },
+  ERROR: {
+    label: 'Voice Error',
+    color: 'text-rose-400',
+    bg: 'bg-rose-950/60 border-rose-500/50',
+    dot: 'bg-rose-400',
+  },
+};
 
 export const GlobalVoiceAssistant: React.FC = () => {
   const {
@@ -53,54 +105,12 @@ export const GlobalVoiceAssistant: React.FC = () => {
   const isSpeaking = state.status === 'SPEAKING';
   const isListeningWake = state.status === 'LISTENING_WAKEWORD';
 
-  // Status configuration
-  const statusConfig = {
-    IDLE: {
-      label: 'Voice Standby',
-      color: 'text-lab-muted',
-      bg: 'bg-zinc-800/60 border-zinc-700',
-      dot: 'bg-zinc-500',
-    },
-    LISTENING_WAKEWORD: {
-      label: "Say 'Hey KOCH'",
-      color: 'text-emerald-400',
-      bg: 'bg-emerald-950/40 border-emerald-500/40',
-      dot: 'bg-emerald-400 animate-pulse',
-    },
-    HEARD_WAKEWORD: {
-      label: 'Wake Word Detected',
-      color: 'text-cyan-300',
-      bg: 'bg-cyan-950/60 border-cyan-400',
-      dot: 'bg-cyan-300 animate-ping',
-    },
-    LISTENING_SPEECH: {
-      label: `Streaming to ${state.sttEngine}`,
-      color: 'text-teal-300',
-      bg: 'bg-teal-950/60 border-teal-400/60 shadow-[0_0_15px_rgba(20,184,166,0.25)]',
-      dot: 'bg-teal-400 animate-pulse',
-    },
-    GENERATING_REPLY: {
-      label: 'K.O.C.H. AI Thinking…',
-      color: 'text-indigo-300',
-      bg: 'bg-indigo-950/60 border-indigo-400/60',
-      dot: 'bg-indigo-400 animate-spin',
-    },
-    SPEAKING: {
-      label: 'Speaking Response',
-      color: 'text-amber-300',
-      bg: 'bg-amber-950/60 border-amber-400/60',
-      dot: 'bg-amber-400 animate-bounce',
-    },
-    ERROR: {
-      label: 'Voice Error',
-      color: 'text-rose-400',
-      bg: 'bg-rose-950/60 border-rose-500/50',
-      dot: 'bg-rose-400',
-    },
-  }[state.status];
+  const statusConfig = STATUS_CONFIG[state.status];
+  const statusLabel =
+    state.status === 'LISTENING_SPEECH' ? `Streaming to ${state.sttEngine}` : statusConfig.label;
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4 pointer-events-none">
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4">
       <div className="pointer-events-auto bg-lab-surface/95 backdrop-blur-xl border border-lab-border/80 shadow-2xl rounded-2xl overflow-hidden transition-all duration-300">
         
         {/* Top Control Ribbon */}
@@ -110,7 +120,7 @@ export const GlobalVoiceAssistant: React.FC = () => {
           <div className="flex items-center gap-2.5">
             <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-mono font-medium ${statusConfig.bg} ${statusConfig.color}`}>
               <span className={`w-2 h-2 rounded-full ${statusConfig.dot}`} />
-              <span>{statusConfig.label}</span>
+              <span>{statusLabel}</span>
             </div>
 
             {state.isHandsFree && (
@@ -133,7 +143,7 @@ export const GlobalVoiceAssistant: React.FC = () => {
               }`}
             >
               <Mic className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">
+              <span className="inline">
                 {state.isHandsFree ? 'Wake: ON' : 'Wake: OFF'}
               </span>
             </button>
