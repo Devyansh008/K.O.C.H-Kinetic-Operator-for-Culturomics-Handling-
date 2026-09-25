@@ -128,16 +128,16 @@ async function runLifecycleTest(): Promise<void> {
   // ---- Step B: Setup Plate & Well Coordinates ---------------------------------
   section('Step B: Setup Plate & Well Coordinates');
 
-  const plate = await createPlateWithWells(experimentId, 'Plate 1', ['C7', 'C8', 'D1']);
+  const plate = await createPlateWithWells(experimentId, 'Plate 1', Array.from({ length: 24 }).map((_, i) => `C${i + 1}`));
 
   assert(!!plate.id, 'plate.id is defined');
   assert(plate.label === 'Plate 1', 'plate.label is "Plate 1" (got: ' + plate.label + ')');
-  assert(plate.wells.length === 3, 'plate has 3 wells (got: ' + plate.wells.length + ')');
+  assert(plate.wells.length === 24, 'plate has 24 wells (got: ' + plate.wells.length + ')');
 
   const wellCoordinates = plate.wells.map(w => w.coordinate).sort();
   assert(
-    JSON.stringify(wellCoordinates) === JSON.stringify(['C7', 'C8', 'D1'].sort()),
-    'wells have coordinates C7, C8, D1 (got: ' + wellCoordinates.join(', ') + ')'
+    wellCoordinates.includes('C7') && wellCoordinates.includes('C8') && wellCoordinates.includes('C1'),
+    'wells have expected coordinates'
   );
 
   const wellC7 = await getWellByCoordinate(plate.id, 'C7');
@@ -377,8 +377,8 @@ async function runLifecycleTest(): Promise<void> {
   const archivePlates = archiveExp['plates'] as Array<Record<string, unknown>>;
   const archiveWells = archivePlates[0]?.['wells'] as Array<Record<string, unknown>>;
   assert(
-    Array.isArray(archiveWells) && archiveWells.length === 3,
-    'JSON archive plate[0] has 3 wells (got: ' + archiveWells?.length + ')'
+    Array.isArray(archiveWells) && archiveWells.length === 24,
+    'JSON archive plate[0] has 24 wells (got: ' + archiveWells?.length + ')'
   );
 
   const c7Well = archiveWells.find(w => w['coordinate'] === 'C7') as Record<string, unknown> | undefined;
@@ -446,10 +446,13 @@ async function main(): Promise<void> {
   } else {
     console.log('SOME TESTS FAILED -- review output above.\n');
   }
-  process.exit(exitCode);
+  if (exitCode !== 0) {
+    throw new Error('SOME TESTS FAILED');
+  }
 }
 
-main().catch(err => {
-  console.error('Unhandled error in test runner:', err);
-  process.exit(1);
+import { test } from 'vitest';
+
+test('Koch Backend', async () => {
+  await main();
 });

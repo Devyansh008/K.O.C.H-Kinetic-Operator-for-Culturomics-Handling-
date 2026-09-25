@@ -5,6 +5,7 @@ import { logCompensatingEvent, getExperimentEvents } from '../../src/server/func
 import { generateElnReport, exportStandardized } from '../../src/server/functions/eln';
 import { queueEvent, getBufferedEvents, clearBuffer } from '../../src/lib/offline-queue';
 import prisma from '../../src/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { EventType } from '../../src/server/db/repositories';
 
 // Mock TanStack Start Context
@@ -29,12 +30,13 @@ async function callFn(serverFn: any, data: any = {}) {
 }
 
 // Mock Prisma to bypass Supabase P1000 Connection Error
-prisma.telemetryEvent.createMany = async () => ({ count: 2 }) as any;
-prisma.telemetryEvent.create = async (args: any) => ({ id: 'mock-event-id', ...args.data }) as any;
-prisma.voiceIntentLog.findMany = async () => [] as any;
-prisma.telemetryEvent.findMany = async () => [] as any;
-prisma.elnReport.create = async (args: any) => ({ id: 'mock-report-id', ...args.data }) as any;
-prisma.experiment.findUniqueOrThrow = async () => ({
+const prismaAny = prisma as any;
+prismaAny.telemetryEvent.createMany = async () => ({ count: 2 }) as any;
+prismaAny.telemetryEvent.create = async (args: any) => ({ id: 'mock-event-id', ...args.data }) as any;
+prismaAny.voiceIntentLog.findMany = async () => [] as any;
+prismaAny.telemetryEvent.findMany = async () => [] as any;
+prismaAny.elnReport.create = async (args: any) => ({ id: 'mock-report-id', ...args.data }) as any;
+prismaAny.experiment.findUniqueOrThrow = async () => ({
   id: 'exp_stage5_test',
   name: 'Stage 5 Test',
   status: 'COMPLETED',
@@ -119,7 +121,8 @@ async function runTest() {
   console.log('All Stage 5 tests passed successfully!');
 }
 
-runTest().catch((err) => {
-  console.error('Test failed:', err);
-  process.exit(1);
+import { test } from 'vitest';
+
+test('Stage 5 ELN Offline Test', async () => {
+  await runTest();
 });

@@ -238,7 +238,7 @@ export async function handleGenerateAssistantReply(
   return {
     replyText: fallbackReply,
     source: 'rule-engine',
-    intent: { action: resolved.action, details: resolved as Record<string, unknown> },
+    intent: { action: resolved.action, details: resolved as any },
     actionExecuted,
   };
 }
@@ -248,6 +248,6 @@ export async function handleGenerateAssistantReply(
  */
 export const generateAssistantReply = createServerFn({ method: 'POST' })
   .validator((data: unknown) => GenerateAssistantReplySchema.parse(data))
-  .handler(async ({ data }: { data: GenerateAssistantReplyInput }): Promise<AssistantReplyResult> => {
+  .handler(async ({ data }: { data: GenerateAssistantReplyInput }): Promise<any> => {
     return handleGenerateAssistantReply(data);
   });

@@ -10,10 +10,15 @@ import { runWithStartContext } from '@tanstack/start-storage-context';
 const dummyContext = {
   request: new Request('http://localhost'),
   responseHeaders: new Headers(),
+  getRouter: () => ({}) as any,
+  startOptions: {},
+  contextAfterGlobalMiddlewares: {},
+  executedRequestMiddlewares: new Set<any>(),
+  handlerType: 'GET',
 };
 
 async function callFn(serverFn: any, data: any = {}) {
-  return await runWithStartContext(dummyContext, async () => {
+  return await runWithStartContext(dummyContext as any, async () => {
     return await serverFn({ data });
   });
 }
@@ -99,7 +104,8 @@ async function runTest() {
   console.log('All tests passed successfully.');
 }
 
-runTest().catch((err) => {
-  console.error('Test failed:', err);
-  process.exit(1);
+import { test } from 'vitest';
+
+test('STT Lexicon Test', async () => {
+  await runTest();
 });

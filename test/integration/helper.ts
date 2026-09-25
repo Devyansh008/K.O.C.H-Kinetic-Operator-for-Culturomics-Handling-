@@ -20,17 +20,7 @@ export async function callFn<TInput, TOutput>(
     handlerType: 'serverFn' as const,
   };
 
-  return await runWithStartContext(dummyContext, async () => {
-    if (typeof serverFn?.__executeServer === 'function') {
-      const res: any = await serverFn.__executeServer({
-        method: serverFn.method || 'POST',
-        data,
-      });
-      if (res?.error) {
-        throw res.error;
-      }
-      return res?.result;
-    }
+  return await runWithStartContext(dummyContext as any, async () => {
     return await serverFn({ data });
   });
 }

@@ -151,7 +151,7 @@ export const ingestVoiceIntent = createServerFn({ method: 'POST' })
       }
       case 'START_TIMER': {
         updateActiveState(data.experimentId, {
-          timerMarks: [...(currentState.timerMarks ?? []), timerMark],
+          timerMarks: [...(currentState?.timerMarks ?? []), timerMark],
         });
         break;
       }

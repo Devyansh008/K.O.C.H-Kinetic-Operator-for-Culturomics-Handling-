@@ -75,7 +75,7 @@ export type ExperimentWithRelations = Experiment & {
  * @returns     The newly created Experiment row
  */
 export async function createExperiment(name: string): Promise<Experiment> {
-    console.log('createExperiment called, prisma=', prisma);
+
     return prisma.experiment.create({
       data: {
         name,

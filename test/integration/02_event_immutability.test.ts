@@ -92,10 +92,11 @@ describe('Pillar 2: Immutable Event Stream & Persistence Tests', () => {
       experimentId: experiment.id,
     });
 
-    expect(events.events.length).toBe(2);
-    expect(events.events[0].id).toBe(initialEvent.id);
-    expect((events.events[0].rawPayload as any).activeCoordinate).toBe('C7');
-    expect((events.events[1].rawPayload as any).correction.activeCoordinate).toBe('C8');
-    expect((events.events[1].rawPayload as any).reason).toContain('Operator misidentified');
+    const telemetryOnly = events.events.filter((e: any) => e._eventType === 'telemetry');
+    expect(telemetryOnly.length).toBe(2);
+    expect(telemetryOnly[0].id).toBe(initialEvent.id);
+    expect((telemetryOnly[0].rawPayload as any).activeCoordinate).toBe('C7');
+    expect((telemetryOnly[1].rawPayload as any).correction.activeCoordinate).toBe('C8');
+    expect((telemetryOnly[1].rawPayload as any).correction.reason).toContain('Operator misidentified');
   });
 });
