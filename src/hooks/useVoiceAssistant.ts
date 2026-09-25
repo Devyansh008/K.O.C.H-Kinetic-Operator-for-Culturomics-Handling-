@@ -13,6 +13,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getAssemblyAiToken, generateAssistantReply, type AssistantReplyResult } from '../server/functions/voice-assistant';
 import { useKoch } from '../lib/mockState';
+import { useVoiceSettings } from '../lib/voice-settings';
 import {
   floatTo16BitPCM,
   playWakeChime,
@@ -79,6 +80,7 @@ const ERR_NO_MIC = 'No microphone found. Connect a mic and try again.';
 
 export function useVoiceAssistant() {
   const { state: kochState, markWell, emitVoiceUtterance } = useKoch();
+  const setAutoWakeEnabled = useVoiceSettings((s) => s.setAutoWakeEnabled);
 
   const [state, setState] = useState<VoiceAssistantState>(INITIAL_STATE);
 
@@ -615,27 +617,8 @@ export function useVoiceAssistant() {
     }
   }, [triggerWakeWordWakeup]);
 
-  // ─── Toggle Hands-Free Listening ──────────────────────────────────────────
-  const toggleHandsFree = useCallback(async () => {
-    if (state.isHandsFree) {
-      stopAudioStreaming();
-      isWakeActiveRef.current = false;
-      if (wakeRecognitionRef.current) {
-        try {
-          wakeRecognitionRef.current.stop();
-        } catch {}
-        wakeRecognitionRef.current = null;
-      }
-      setState((s) => ({
-        ...s,
-        isHandsFree: false,
-        status: 'IDLE',
-        currentTranscript: '',
-        errorMessage: null,
-      }));
-      return;
-    }
-
+  // ─── Hands-Free Enable / Disable ──────────────────────────────────────────
+  const enableHandsFree = useCallback(async (): Promise<boolean> => {
     // Explicitly trigger the browser mic permission prompt before wake listening
     const granted = await requestMicPermission();
     if (!granted) {
@@ -644,7 +627,7 @@ export function useVoiceAssistant() {
         status: 'ERROR',
         errorMessage: ERR_MIC_DENIED,
       }));
-      return;
+      return false;
     }
     setState((s) => ({
       ...s,
@@ -652,7 +635,37 @@ export function useVoiceAssistant() {
       status: 'LISTENING_WAKEWORD',
       errorMessage: null,
     }));
-  }, [state.isHandsFree, requestMicPermission, stopAudioStreaming]);
+    return true;
+  }, [requestMicPermission]);
+
+  const disableHandsFree = useCallback(() => {
+    stopAudioStreaming();
+    isWakeActiveRef.current = false;
+    if (wakeRecognitionRef.current) {
+      try {
+        wakeRecognitionRef.current.stop();
+      } catch {}
+      wakeRecognitionRef.current = null;
+    }
+    setState((s) => ({
+      ...s,
+      isHandsFree: false,
+      status: 'IDLE',
+      currentTranscript: '',
+      errorMessage: null,
+    }));
+  }, [stopAudioStreaming]);
+
+  // ─── Toggle Hands-Free Listening ──────────────────────────────────────────
+  const toggleHandsFree = useCallback(async () => {
+    const next = !state.isHandsFree;
+    setAutoWakeEnabled(next); // persist the user's wake preference to localStorage
+    if (next) {
+      await enableHandsFree();
+    } else {
+      disableHandsFree();
+    }
+  }, [state.isHandsFree, setAutoWakeEnabled, enableHandsFree, disableHandsFree]);
 
   // ─── Manual Push-To-Talk Trigger ──────────────────────────────────────────
   const triggerManualTalk = useCallback(() => {
@@ -703,6 +716,15 @@ export function useVoiceAssistant() {
   }, [stopAudioStreaming]);
 
   // ─── Lifecycle Sync ───────────────────────────────────────────────────────
+  // Auto-enable hands-free wake listening on page load from the persisted
+  // preference (zustand rehydrates localStorage synchronously before mount).
+  useEffect(() => {
+    if (useVoiceSettings.getState().autoWakeEnabled) {
+      enableHandsFree();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (state.isHandsFree && state.status === 'LISTENING_WAKEWORD') {
       startWakeWordRecognition();

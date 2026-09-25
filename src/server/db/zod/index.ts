@@ -76,14 +76,12 @@ export const SystemMetricScalarFieldEnumSchema = z.enum(['id','serverStatus','he
 
 export const SortOrderSchema = z.enum(['asc','desc']);
 
-// @ts-ignore
 export const JsonNullValueInputSchema: z.ZodType<Prisma.JsonNullValueInput> = z.enum(['JsonNull',]).transform((value) => (value === 'JsonNull' ? Prisma.JsonNull : value));
 
 export const QueryModeSchema = z.enum(['default','insensitive']);
 
 export const NullsOrderSchema = z.enum(['first','last']);
 
-// @ts-ignore
 export const JsonNullValueFilterSchema: z.ZodType<Prisma.JsonNullValueFilter> = z.enum(['DbNull','JsonNull','AnyNull',]).transform((value) => value === 'JsonNull' ? Prisma.JsonNull : value === 'DbNull' ? Prisma.DbNull : value === 'AnyNull' ? Prisma.AnyNull : value);
 
 export const ExperimentStatusSchema = z.enum(['ACTIVE','COMPLETED','ABORTED','ARCHIVED']);
