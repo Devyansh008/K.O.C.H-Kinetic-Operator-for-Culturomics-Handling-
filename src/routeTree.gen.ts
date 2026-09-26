@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DevTestingRouteImport } from './routes/dev-testing'
+import { Route as ExperimentRouteImport } from './routes/experiment'
 import { Route as LogsRouteImport } from './routes/logs'
 import { Route as VoiceRouteImport } from './routes/voice'
 
@@ -22,6 +23,11 @@ const IndexRoute = IndexRouteImport.update({
 const DevTestingRoute = DevTestingRouteImport.update({
   id: '/dev-testing',
   path: '/dev-testing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExperimentRoute = ExperimentRouteImport.update({
+  id: '/experiment',
+  path: '/experiment',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LogsRoute = LogsRouteImport.update({
@@ -38,12 +44,14 @@ const VoiceRoute = VoiceRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dev-testing': typeof DevTestingRoute
+  '/experiment': typeof ExperimentRoute
   '/logs': typeof LogsRoute
   '/voice': typeof VoiceRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dev-testing': typeof DevTestingRoute
+  '/experiment': typeof ExperimentRoute
   '/logs': typeof LogsRoute
   '/voice': typeof VoiceRoute
 }
@@ -51,20 +59,22 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dev-testing': typeof DevTestingRoute
+  '/experiment': typeof ExperimentRoute
   '/logs': typeof LogsRoute
   '/voice': typeof VoiceRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dev-testing' | '/logs' | '/voice'
+  fullPaths: '/' | '/dev-testing' | '/experiment' | '/logs' | '/voice'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dev-testing' | '/logs' | '/voice'
-  id: '__root__' | '/' | '/dev-testing' | '/logs' | '/voice'
+  to: '/' | '/dev-testing' | '/experiment' | '/logs' | '/voice'
+  id: '__root__' | '/' | '/dev-testing' | '/experiment' | '/logs' | '/voice'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DevTestingRoute: typeof DevTestingRoute
+  ExperimentRoute: typeof ExperimentRoute
   LogsRoute: typeof LogsRoute
   VoiceRoute: typeof VoiceRoute
 }
@@ -83,6 +93,13 @@ declare module '@tanstack/react-router' {
       path: '/dev-testing'
       fullPath: '/dev-testing'
       preLoaderRoute: typeof DevTestingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/experiment': {
+      id: '/experiment'
+      path: '/experiment'
+      fullPath: '/experiment'
+      preLoaderRoute: typeof ExperimentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/logs': {
@@ -105,6 +122,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DevTestingRoute: DevTestingRoute,
+  ExperimentRoute: ExperimentRoute,
   LogsRoute: LogsRoute,
   VoiceRoute: VoiceRoute,
 }

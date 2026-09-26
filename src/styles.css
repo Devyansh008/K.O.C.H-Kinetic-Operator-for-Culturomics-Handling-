@@ -9,17 +9,25 @@
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
 
+  html, body, #root, :root {
+    background-color: #0c0a09 !important; /* bg-stone-950 */
+    color: #fef3c7;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
   html {
-    @apply bg-lab-bg text-lab-text font-sans antialiased;
+    @apply bg-stone-950 text-lab-text font-sans antialiased;
     scroll-behavior: smooth;
   }
 
   body {
-    @apply bg-lab-bg text-lab-text min-h-screen;
+    @apply bg-stone-950 text-lab-text min-h-screen;
   }
 
   ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track  { @apply bg-lab-bg; }
+  ::-webkit-scrollbar-track  { @apply bg-stone-950; }
   ::-webkit-scrollbar-thumb  { @apply bg-lab-border rounded-full; }
   ::-webkit-scrollbar-thumb:hover { @apply bg-lab-muted; }
 }
