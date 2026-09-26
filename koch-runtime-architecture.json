@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "K.O.C.H. Runtime Architecture",
+    "locale": "en",
+    "output": "koch-runtime-architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/Devyansh008/K.O.C.H-Kinetic-Operator-for-Culturomics-Handling-",
+      "provider": "github",
+      "revision": "2a22eddde7206c1d8fa1fd91c9c0e5e75a86cf25"
+    },
+    "views": [
+      {
+        "id": "primary-command-path",
+        "label": "Primary command path",
+        "focus": ["operator", "web-client", "server-functions", "intent-state", "postgres"],
+        "note": "An operator command is handled through the client, server functions, intent processing, and durable telemetry."
+      },
+      {
+        "id": "voice-assistant",
+        "label": "Voice assistant",
+        "focus": ["operator", "voice-client", "assemblyai", "server-functions", "gemini"],
+        "note": "The browser streams speech to AssemblyAI and asks the server to generate a reply."
+      },
+      {
+        "id": "webhook-ingress",
+        "label": "Webhook ingress",
+        "focus": ["livekit", "webhook", "intent-state", "postgres"],
+        "note": "LiveKit transcript callbacks cross an HMAC and API-key protected ingress before persistence."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "operator",
+      "type": "external",
+      "label": "Lab operator",
+      "sublabel": "Browser and microphone",
+      "pos": [30, 330],
+      "size": [150, 68]
+    },
+    {
+      "id": "web-client",
+      "type": "frontend",
+      "label": "K.O.C.H. web client",
+      "sublabel": "React and TanStack Router",
+      "pos": [250, 330],
+      "size": [165, 68],
+      "sources": [{ "path": "src/routes/__root.tsx", "line": 61, "end_line": 85, "label": "app shell" }]
+    },
+    {
+      "id": "voice-client",
+      "type": "frontend",
+      "label": "Voice assistant client",
+      "sublabel": "Web Audio and WebSocket",
+      "pos": [250, 150],
+      "size": [165, 68],
+      "sources": [{ "path": "src/hooks/useVoiceAssistant.ts", "line": 1, "end_line": 15, "label": "voice lifecycle" }]
+    },
+    {
+      "id": "server-functions",
+      "type": "backend",
+      "label": "TanStack server functions",
+      "sublabel": "Validated POST RPC",
+      "pos": [500, 330],
+      "size": [175, 68],
+      "sources": [{ "path": "src/server/functions/voice-assistant.ts", "line": 82, "end_line": 85, "label": "token RPC" }, { "path": "src/server/functions/voice-assistant.ts", "line": 249, "end_line": 252, "label": "reply RPC" }]
+    },
+    {
+      "id": "intent-state",
+      "type": "backend",
+      "label": "Intent and active state",
+      "sublabel": "Culturomics command handling",
+      "pos": [740, 330],
+      "size": [170, 68],
+      "sources": [{ "path": "src/server/services/intentResolver.ts", "line": 28, "end_line": 79, "label": "intent resolver" }, { "path": "src/server/functions/voice-assistant.ts", "line": 114, "end_line": 148, "label": "command actions" }]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "Experiments and telemetry",
+      "pos": [980, 330],
+      "size": [165, 68],
+      "sources": [{ "path": "prisma/schema.prisma", "line": 15, "end_line": 19, "label": "datasource" }, { "path": "prisma/schema.prisma", "line": 69, "end_line": 80, "label": "telemetry model" }]
+    },
+    {
+      "id": "assemblyai",
+      "type": "external",
+      "label": "AssemblyAI",
+      "sublabel": "Realtime speech-to-text",
+      "pos": [500, 150],
+      "size": [170, 68],
+      "sources": [{ "path": "src/server/functions/voice-assistant.ts", "line": 35, "end_line": 68, "label": "token minting" }]
+    },
+    {
+      "id": "gemini",
+      "type": "external",
+      "label": "Google Gemini",
+      "sublabel": "Optional reply generation",
+      "pos": [740, 150],
+      "size": [170, 68],
+      "sources": [{ "path": "src/server/functions/voice-assistant.ts", "line": 155, "end_line": 199, "label": "LLM request" }]
+    },
+    {
+      "id": "livekit",
+      "type": "external",
+      "label": "LiveKit pipeline",
+      "sublabel": "Transcript callback source",
+      "pos": [740, 520],
+      "size": [170, 68],
+      "sources": [{ "path": "src/server/webhooks/voice-pipeline.ts", "line": 125, "end_line": 138, "label": "webhook contract" }]
+    },
+    {
+      "id": "webhook",
+      "type": "security",
+      "label": "Webhook ingress",
+      "sublabel": "HMAC and API-key checks",
+      "pos": [980, 520],
+      "size": [165, 68],
+      "sources": [{ "path": "src/routes/api/webhooks/-livekit-transcript.ts", "line": 5, "end_line": 28, "label": "API route" }, { "path": "src/server/webhooks/voice-pipeline.ts", "line": 146, "end_line": 166, "label": "authentication" }]
+    }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "K.O.C.H. application trust boundary", "wraps": ["web-client", "voice-client", "server-functions", "intent-state", "postgres", "webhook"], "pad": 36 },
+    { "kind": "security-group", "label": "Server-side secrets and persistence boundary", "wraps": ["server-functions", "intent-state", "postgres", "webhook"], "pad": 20 }
+  ],
+  "connections": [
+    { "id": "operator-ui", "from": "operator", "to": "web-client", "label": "1. HTTPS interaction", "variant": "emphasis", "labelAt": [215, 412] },
+    { "id": "ui-rpc", "from": "web-client", "to": "server-functions", "label": "2. validated RPC", "variant": "emphasis" },
+    { "id": "resolve-command", "from": "server-functions", "to": "intent-state", "label": "3. resolve command", "variant": "emphasis", "labelAt": [708, 412] },
+    { "id": "persist-telemetry", "from": "intent-state", "to": "postgres", "label": "4. append telemetry", "variant": "emphasis", "labelAt": [945, 412] },
+    { "id": "voice-capture", "from": "operator", "to": "voice-client", "label": "microphone", "fromSide": "top", "toSide": "left" },
+    { "id": "stt-stream", "from": "voice-client", "to": "assemblyai", "label": "realtime speech", "fromSide": "right", "toSide": "left" },
+    { "id": "assistant-rpc", "from": "voice-client", "to": "server-functions", "label": "transcript RPC", "fromSide": "bottom", "toSide": "top" },
+    { "id": "mint-token", "from": "server-functions", "to": "assemblyai", "label": "short-lived token", "variant": "security", "fromSide": "right", "toSide": "bottom", "labelAt": [587, 430] },
+    { "id": "llm-reply", "from": "server-functions", "to": "gemini", "label": "optional reply", "variant": "dashed", "fromSide": "top", "toSide": "bottom", "labelAt": [825, 270] },
+    { "id": "pipeline-callback", "from": "livekit", "to": "webhook", "label": "signed transcript callback", "variant": "security", "labelAt": [945, 602] },
+    { "id": "webhook-intent", "from": "webhook", "to": "intent-state", "label": "validated transcript", "variant": "security", "fromSide": "top", "toSide": "bottom" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Primary path", "items": ["Browser commands enter validated server functions", "Resolved commands update active state and append telemetry"] },
+    { "dot": "violet", "title": "External services", "items": ["AssemblyAI issues short-lived realtime tokens", "Gemini is optional; a rule-engine fallback remains in-process", "LiveKit can submit transcript callbacks"] },
+    { "dot": "rose", "title": "Trust boundaries", "items": ["Secrets stay in server-side environment variables", "Webhook ingress requires HMAC-SHA256 plus a secondary API key", "PostgreSQL holds experiment, well, and append-only telemetry records"] }
+  ]
+}
