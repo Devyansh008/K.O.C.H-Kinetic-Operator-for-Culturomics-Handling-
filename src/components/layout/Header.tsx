@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { FlaskConical, Play, Square, X, Wifi, Clock } from 'lucide-react';
+import { FlaskConical, Play, Square, X, Wifi, Clock, Mic } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { useKoch } from '../../lib/mockState';
 
@@ -82,6 +82,12 @@ export function Header() {
 
       {/* Right: timer + controls */}
       <div className="flex items-center gap-3">
+        {/* Voice Assistant Ready Pill */}
+        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded bg-teal-500/10 text-teal-400 border border-teal-500/20 text-xs font-mono">
+          <Mic className="w-3.5 h-3.5 text-teal-400" />
+          <span>Say "Hey KOCH"</span>
+        </div>
+
         {/* Navigation to Test Bench */}
         <Link 
           to="/dev-testing" 

@@ -72,9 +72,9 @@ describe('Pillar 4: Frame-Voice Timestamp Correlation Tests', () => {
 
     // 3. Verify chronological audit trail retains monotonic timestamps
     const events = await callFn<any, any>(getExperimentEvents, { experimentId });
-    expect(events.length).toBeGreaterThanOrEqual(2);
+    expect(events.events.length).toBeGreaterThanOrEqual(2);
 
-    const markEvent = events.find((e: any) => e.type === EventType.FRAME_MARK);
+    const markEvent = events.events.find((e: any) => e.type === EventType.FRAME_MARK);
     expect(markEvent).toBeDefined();
     expect(markEvent.wellId).toBe(wellC7Id);
   });

@@ -1,0 +1,38 @@
+src/routes/api/webhooks/-livekit-transcript.ts(1,36): error TS2307: Cannot find module '@tanstack/react-start/api' or its corresponding type declarations.
+src/routes/api/webhooks/-livekit-transcript.ts(5,18): error TS7031: Binding element 'request' implicitly has an 'any' type.
+src/routes/api/webhooks/-livekit-transcript.ts(13,30): error TS7006: Parameter 'value' implicitly has an 'any' type.
+src/routes/api/webhooks/-livekit-transcript.ts(13,37): error TS7006: Parameter 'key' implicitly has an 'any' type.
+src/server/db/zod/index.ts(79,14): error TS2322: Type 'ZodEffects<ZodEnum<["JsonNull"]>, JsonNull, "JsonNull">' is not assignable to type 'ZodType<JsonNull, ZodTypeDef, JsonNull>'.
+  Types of property '_input' are incompatible.
+    Type 'string' is not assignable to type 'JsonNull'.
+src/server/db/zod/index.ts(85,14): error TS2322: Type 'ZodEffects<ZodEnum<["DbNull", "JsonNull", "AnyNull"]>, JsonNull | DbNull | AnyNull, "JsonNull" | "DbNull" | "AnyNull">' is not assignable to type 'ZodType<JsonNullValueFilter, ZodTypeDef, JsonNullValueFilter>'.
+  Types of property '_input' are incompatible.
+    Type 'string' is not assignable to type 'JsonNullValueFilter'.
+      Type 'string' is not assignable to type 'JsonNullValueFilter'.
+src/server/functions/telemetry.ts(154,28): error TS18047: 'currentState' is possibly 'null'.
+src/server/functions/voice-assistant.ts(251,12): error TS2345: Argument of type '({ data }: { data: GenerateAssistantReplyInput; }) => Promise<AssistantReplyResult>' is not assignable to parameter of type 'ServerFn<Register, "POST", undefined, (data: unknown) => { transcript: string; plateLabel?: string | undefined; experimentId?: string | undefined; }, Promise<AssistantReplyResult>, true>'.
+  Type 'Promise<AssistantReplyResult>' is not assignable to type 'Promise<ValidateSerializableMapped<AssistantReplyResult, RegisteredSerializableInput<Register>>>'.
+    Type 'AssistantReplyResult' is not assignable to type 'ValidateSerializableMapped<AssistantReplyResult, RegisteredSerializableInput<Register>>'.
+      The types of 'intent.details' are incompatible between these types.
+        Type 'Record<string, unknown> | undefined' is not assignable to type 'ValidateSerializableMapped<Record<string, unknown>, RegisteredSerializableInput<Register>> | undefined'.
+          Type 'Record<string, unknown>' is not assignable to type 'ValidateSerializableMapped<Record<string, unknown>, RegisteredSerializableInput<Register>>'.
+            'string' index signatures are incompatible.
+              Type 'unknown' is not assignable to type 'SerializationError<"Type may not be serializable">'.
+test/integration/03_stt_lexicon.test.ts(16,36): error TS2345: Argument of type '{ request: Request; responseHeaders: Headers; }' is not assignable to parameter of type 'StartStorageContext'.
+  Type '{ request: Request; responseHeaders: Headers; }' is missing the following properties from type 'StartStorageContext': getRouter, startOptions, contextAfterGlobalMiddlewares, executedRequestMiddlewares, handlerType
+test/integration/04_tts_barge_in.test.ts(16,5): error TS2322: Type '{ action: "UNKNOWN"; }' is not assignable to type '{ action: "MARK_WELL"; wellCoordinate?: string | undefined; plateLabel?: string | undefined; wellId?: string | undefined; plateId?: string | undefined; } | { action: "ADD_TUBE"; tubeId: string; } | ... 4 more ... | { ...; }'.
+  Property 'raw' is missing in type '{ action: "UNKNOWN"; }' but required in type '{ action: "UNKNOWN"; raw: string; }'.
+test/integration/05_stage5_eln_offline.test.ts(32,48): error TS2322: Type 'Promise<any>' is not assignable to type 'PrismaPromise<BatchPayload>'.
+  Types of property '[Symbol.toStringTag]' are incompatible.
+    Type 'string' is not assignable to type '"PrismaPromise"'.
+test/integration/05_stage5_eln_offline.test.ts(33,1): error TS2322: Type '(args: any) => Promise<any>' is not assignable to type '<T extends TelemetryEventCreateArgs>(args: SelectSubset<T, TelemetryEventCreateArgs<DefaultArgs>>) => Prisma__TelemetryEventClient<GetFindResult<$TelemetryEventPayload<DefaultArgs>, T, {}>, never, DefaultArgs>'.
+  Type 'Promise<any>' is missing the following properties from type 'Prisma__TelemetryEventClient<GetFindResult<$TelemetryEventPayload<DefaultArgs>, T, {}>, never, DefaultArgs>': experiment, well
+test/integration/05_stage5_eln_offline.test.ts(34,46): error TS2322: Type 'Promise<any>' is not assignable to type 'PrismaPromise<GetFindResult<$VoiceIntentLogPayload<DefaultArgs>, T, {}>[]>'.
+  Types of property '[Symbol.toStringTag]' are incompatible.
+    Type 'string' is not assignable to type '"PrismaPromise"'.
+test/integration/05_stage5_eln_offline.test.ts(35,46): error TS2322: Type 'Promise<any>' is not assignable to type 'PrismaPromise<GetFindResult<$TelemetryEventPayload<DefaultArgs>, T, {}>[]>'.
+  Types of property '[Symbol.toStringTag]' are incompatible.
+    Type 'string' is not assignable to type '"PrismaPromise"'.
+test/integration/05_stage5_eln_offline.test.ts(36,1): error TS2322: Type '(args: any) => Promise<any>' is not assignable to type '<T extends ElnReportCreateArgs>(args: SelectSubset<T, ElnReportCreateArgs<DefaultArgs>>) => Prisma__ElnReportClient<GetFindResult<$ElnReportPayload<DefaultArgs>, T, {}>, never, DefaultArgs>'.
+  Property 'experiment' is missing in type 'Promise<any>' but required in type 'Prisma__ElnReportClient<GetFindResult<$ElnReportPayload<DefaultArgs>, T, {}>, never, DefaultArgs>'.
+test/integration/05_stage5_eln_offline.test.ts(37,51): error TS2739: Type 'Promise<any>' is missing the following properties from type 'Prisma__ExperimentClient<GetFindResult<$ExperimentPayload<DefaultArgs>, T, {}>, never, DefaultArgs>': plates, events, voiceLogs, elnReports

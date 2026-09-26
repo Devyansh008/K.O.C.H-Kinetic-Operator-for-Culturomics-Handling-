@@ -75,12 +75,13 @@ export type ExperimentWithRelations = Experiment & {
  * @returns     The newly created Experiment row
  */
 export async function createExperiment(name: string): Promise<Experiment> {
-  return prisma.experiment.create({
-    data: {
-      name,
-      status: ExperimentStatus.ACTIVE,
-    },
-  });
+
+    return prisma.experiment.create({
+      data: {
+        name,
+        status: ExperimentStatus.ACTIVE,
+      },
+    });
 }
 
 /**

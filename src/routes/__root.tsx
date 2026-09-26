@@ -6,10 +6,11 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Outlet, createRootRoute, Scripts, ScrollRestoration, HeadContent, useRouterState } from '@tanstack/react-router';
+import { Outlet, createRootRoute, Scripts, HeadContent, useRouterState } from '@tanstack/react-router';
 import { KochProvider } from '../lib/mockState';
 import { Header } from '../components/layout/Header';
 import { Sidebar } from '../components/layout/Sidebar';
+import { GlobalVoiceAssistant } from '../components/voice/GlobalVoiceAssistant';
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -63,22 +64,24 @@ function RootLayout() {
                 <Outlet />
               </div>
             ) : (
-              <div className="flex flex-col h-screen">
+              <div className="flex flex-col h-screen overflow-hidden bg-stone-950">
                 {/* Top header bar */}
                 <Header />
 
                 {/* Body: sidebar + main content */}
                 <div className="flex flex-1 overflow-hidden">
                   <Sidebar />
-                  <main className="flex-1 overflow-auto bg-lab-bg p-4">
+                  <main className="flex-1 overflow-auto bg-stone-950 p-4">
                     <Outlet />
                   </main>
                 </div>
+
+                {/* Persistent Site-Wide Voice Assistant */}
+                <GlobalVoiceAssistant />
               </div>
             )}
           </KochProvider>
         </div>
-        <ScrollRestoration />
         <Scripts />
       </body>
     </html>

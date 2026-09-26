@@ -130,18 +130,9 @@ async function callFn<TInput, TOutput>(
     handlerType: 'serverFn' as const,
   };
 
-  return await runWithStartContext(dummyContext, async () => {
-    if (typeof serverFn?.__executeServer === 'function') {
-      const res: any = await serverFn.__executeServer({
-        method: serverFn.method || 'POST',
-        data: { data },
-      });
-      if (res?.error) {
-        throw res.error;
-      }
-      return res?.result !== undefined ? res.result : res;
-    }
-    return await serverFn({ data });
+  return await runWithStartContext(dummyContext as any, async () => {
+    const res = await serverFn({ data });
+    return res;
   });
 }
 
@@ -157,6 +148,7 @@ async function runAll31EndpointsTest(): Promise<void> {
   // #1: startExperiment
   const expName = `E2E Culturomics Run ${Date.now()}`;
   const experiment = await callFn<any, any>(startExperiment, { name: expName });
+
   assert(experiment && experiment.id.length > 0, '#1 startExperiment - created experiment with ID');
   assert(experiment.status === ExperimentStatus.ACTIVE, '#1 startExperiment - initial status is ACTIVE');
 
@@ -429,13 +421,13 @@ async function runAll31EndpointsTest(): Promise<void> {
     experimentId: experiment.id,
     limit: 100,
   });
-  assert(eventStream.length > 0, '#27 getExperimentEvents - retrieved chronological telemetry event stream');
+  assert(eventStream.events.length > 0, '#27 getExperimentEvents - retrieved chronological telemetry event stream');
 
   // #28: logCompensatingEvent
   const compensatingEvent = await callFn<any, any>(logCompensatingEvent, {
     experimentId: experiment.id,
-    reason: 'Correct operator tube ID input error',
-    correctedPayload: { oldTube: 'TB-01', newTube: 'TB-02' },
+    targetEventId: 'mock-target-id',
+    correctionPayload: { reason: 'Correct operator tube ID input error', oldTube: 'TB-01', newTube: 'TB-02' },
   });
   assert(compensatingEvent.type === EventType.STATE_CHANGE, '#28 logCompensatingEvent - logged compensating event to preserve audit trail');
 
@@ -484,7 +476,8 @@ async function runAll31EndpointsTest(): Promise<void> {
   }
 }
 
-runAll31EndpointsTest().catch((err) => {
-  console.error('Fatal test error:', err);
-  process.exit(1);
-});
+import { test } from 'vitest';
+
+test('All 31 API endpoints', async () => {
+  await runAll31EndpointsTest();
+}, 30000);
