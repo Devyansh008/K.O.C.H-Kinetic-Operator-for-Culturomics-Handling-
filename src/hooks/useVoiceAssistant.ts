@@ -240,6 +240,7 @@ export function useVoiceAssistant() {
     if (wsRef.current) {
       try {
         if (wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'Terminate' }));
           wsRef.current.send(JSON.stringify({ terminate_session: true }));
         }
         wsRef.current.close();
@@ -386,7 +387,7 @@ export function useVoiceAssistant() {
 
     // Step 3: Connect to AssemblyAI WebSocket
     try {
-      const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${tokenResult.token}`;
+      const wsUrl = `wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&token=${tokenResult.token}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -450,12 +451,17 @@ export function useVoiceAssistant() {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.message_type === 'PartialTranscript' && data.text) {
-            setState((s) => ({ ...s, currentTranscript: data.text }));
+          // Support AssemblyAI V3 (type: 'Turn', transcript, end_of_turn) & V2 (message_type)
+          const text = data.transcript || data.text || '';
+          const isPartial = data.message_type === 'PartialTranscript' || (data.type === 'Turn' && !data.end_of_turn);
+          const isFinal = data.message_type === 'FinalTranscript' || (data.type === 'Turn' && data.end_of_turn);
+
+          if (isPartial && text) {
+            setState((s) => ({ ...s, currentTranscript: text }));
             resetSilenceTimer();
-          } else if (data.message_type === 'FinalTranscript' && data.text) {
+          } else if (isFinal && text) {
             finalTranscriptAccumulatorRef.current =
-              (finalTranscriptAccumulatorRef.current ? `${finalTranscriptAccumulatorRef.current} ` : '') + data.text;
+              (finalTranscriptAccumulatorRef.current ? `${finalTranscriptAccumulatorRef.current} ` : '') + text;
             setState((s) => ({ ...s, currentTranscript: finalTranscriptAccumulatorRef.current }));
             resetSilenceTimer();
           }

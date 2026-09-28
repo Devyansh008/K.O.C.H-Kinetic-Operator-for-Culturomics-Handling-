@@ -42,13 +42,11 @@ export async function handleGetAssemblyAiToken(): Promise<AssemblyAiTokenResult>
   }
 
   try {
-    const res = await fetch('https://api.assemblyai.com/v2/realtime/token', {
-      method: 'POST',
+    const res = await fetch('https://streaming.assemblyai.com/v3/token?expires_in_seconds=600', {
+      method: 'GET',
       headers: {
         Authorization: apiKey,
-        'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ expires_in: 600 }),
     });
 
     if (!res.ok) {
@@ -60,11 +58,11 @@ export async function handleGetAssemblyAiToken(): Promise<AssemblyAiTokenResult>
       };
     }
 
-    const body = (await res.json()) as { token: string };
+    const body = (await res.json()) as { token: string; expires_in_seconds?: number };
     return {
       token: body.token,
       configured: true,
-      expiresIn: 600,
+      expiresIn: body.expires_in_seconds ?? 600,
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -162,7 +160,7 @@ export async function handleGenerateAssistantReply(
         `Recognized lab intent: ${resolved.action}. Provide confirmation of actions or answer questions crisply.`;
 
       const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${geminiApiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

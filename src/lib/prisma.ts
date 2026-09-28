@@ -442,9 +442,17 @@ function createInMemoryPrisma(): PrismaClient {
 }
 
 function createPrismaClient(): PrismaClient {
-  if (!process.env.DATABASE_URL || !process.env.DATABASE_URL.startsWith('postgres')) {
+  let dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl || !dbUrl.startsWith('postgres')) {
     console.warn("Using In-Memory Prisma Client because DATABASE_URL is missing or not a Postgres URL.");
     return createInMemoryPrisma();
+  }
+
+  // Ensure raw special characters in the database user password are URL encoded for Prisma
+  const parts = dbUrl.match(/^(postgresql:\/\/[^:]+:)(.*)(@.*)$/);
+  if (parts && /[^a-zA-Z0-9_\-\.~%]/.test(parts[2])) {
+    dbUrl = parts[1] + encodeURIComponent(parts[2]) + parts[3];
+    process.env.DATABASE_URL = dbUrl;
   }
 
   try {
