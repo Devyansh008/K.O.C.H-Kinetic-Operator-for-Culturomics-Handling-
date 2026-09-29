@@ -13,19 +13,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getAssemblyAiToken, generateAssistantReply, type AssistantReplyResult } from '../server/functions/voice-assistant';
 import { useKoch } from '../lib/mockState';
-import { useVoiceSettings } from '../lib/voice-settings';
-import {
-  floatTo16BitPCM,
-  playWakeChime,
-  createAudioContext,
-  computeRms,
-  computeAudioLevels,
-  simulateAudioLevels,
-  defaultAudioLevels,
-  getSpeechRecognitionCtor,
-} from '../lib/audio-utils';
-
-// ─── Types ──────────────────────────────────────────────────────────────────
 
 export type AssistantStatus =
   | 'IDLE'               // Voice assistant disabled
@@ -48,41 +35,64 @@ export interface VoiceAssistantState {
   sttEngine: 'AssemblyAI' | 'WebSpeechFallback' | 'Ready';
 }
 
-const INITIAL_STATE: VoiceAssistantState = {
-  status: 'IDLE',
-  isHandsFree: false,
-  ttsMuted: false,
-  currentTranscript: '',
-  lastFinalTranscript: '',
-  assistantReply: null,
-  errorMessage: null,
-  audioLevels: defaultAudioLevels(),
-  sttEngine: 'Ready',
-};
+// Convert Float32Array to 16-bit mono PCM for AssemblyAI WebSocket
+function floatTo16BitPCM(input: Float32Array): ArrayBuffer {
+  const output = new Int16Array(input.length);
+  for (let i = 0; i < input.length; i++) {
+    const s = Math.max(-1, Math.min(1, input[i]));
+    output[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  return output.buffer;
+}
 
-// ─── Tuning Constants ───────────────────────────────────────────────────────
+// Play pleasant two-tone wake-up chime via Web Audio API
+function playWakeChime() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
 
-// Detect "hey koch", "hey coach" plus common ASR mishearings
-const WAKE_WORD_PATTERN = /\b((hey|hi|ok|okay|yo)\s*)?(koch|kochs|coach|coke|kotch|kosh|cock|kok|croc)\b/i;
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(587.33, now); // D5
+    gain1.gain.setValueAtTime(0.12, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.12);
 
-const CAPTURE_SAMPLE_RATE = 16000;
-const PROCESSOR_BUFFER_SIZE = 4096; // ~256ms audio chunks
-const SILENCE_TIMEOUT_MS = 2200;
-const TOKEN_TIMEOUT_MS = 10000;
-const WAKE_CHIME_DELAY_MS = 1500;   // give the operator time to react to the chime
-const MANUAL_TALK_DELAY_MS = 150;
-const WAKE_RESTART_DELAY_MS = 300;
-
-const ERR_MIC_DENIED = 'Microphone access denied. Allow mic permission in your browser to use "Hey KOCH".';
-const ERR_NO_MIC = 'No microphone found. Connect a mic and try again.';
-
-// ─── Hook ───────────────────────────────────────────────────────────────────
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(880, now + 0.1); // A5
+    gain2.gain.setValueAtTime(0.14, now + 0.1);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.1);
+    osc2.stop(now + 0.28);
+  } catch (e) {
+    // AudioContext autoplay restrictions are ignored safely
+  }
+}
 
 export function useVoiceAssistant() {
-  const { state: kochState, markWell, emitVoiceUtterance } = useKoch();
-  const setAutoWakeEnabled = useVoiceSettings((s) => s.setAutoWakeEnabled);
+  const { state: kochState, dispatch, markWell, emitVoiceUtterance } = useKoch();
 
-  const [state, setState] = useState<VoiceAssistantState>(INITIAL_STATE);
+  const [state, setState] = useState<VoiceAssistantState>({
+    status: 'IDLE',
+    isHandsFree: false,
+    ttsMuted: false,
+    currentTranscript: '',
+    lastFinalTranscript: '',
+    assistantReply: null,
+    errorMessage: null,
+    audioLevels: Array(16).fill(4),
+    sttEngine: 'Ready',
+  });
 
   // References to keep event listeners and cleanup stable
   const wakeRecognitionRef = useRef<any>(null);
@@ -92,38 +102,13 @@ export function useVoiceAssistant() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorNodeRef = useRef<ScriptProcessorNode | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mockIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isTransitioningRef = useRef(false);
-  const isWakeActiveRef = useRef(false);
   const finalTranscriptAccumulatorRef = useRef('');
-
-  // ─── Microphone Permission ────────────────────────────────────────────────
-  // Triggers the browser permission prompt. Tracks are released immediately;
-  // the granted permission persists for SpeechRecognition & later capture.
-  const requestMicPermission = useCallback(async (): Promise<boolean> => {
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      return false;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((t) => t.stop());
-      return true;
-    } catch (err) {
-      console.warn('[VoiceAssistant] Microphone permission denied:', err);
-      return false;
-    }
-  }, []);
-
-  // ─── Shared State Helpers ─────────────────────────────────────────────────
-  // Return to hands-free wake listening, or IDLE when hands-free is off.
-  const settleStatus = useCallback(() => {
-    setState((s) => ({ ...s, status: s.isHandsFree ? 'LISTENING_WAKEWORD' : 'IDLE' }));
-  }, []);
 
   // ─── Speak Reply via TTS ──────────────────────────────────────────────────
   const speakReply = useCallback((text: string) => {
     if (state.ttsMuted || typeof window === 'undefined' || !window.speechSynthesis) {
-      settleStatus();
+      setState((s) => ({ ...s, status: s.isHandsFree ? 'LISTENING_WAKEWORD' : 'IDLE' }));
       return;
     }
 
@@ -135,10 +120,9 @@ export function useVoiceAssistant() {
 
       // Select a clean English voice if available
       const voices = window.speechSynthesis.getVoices();
-      const preferredVoice =
-        voices.find(
-          (v) => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha')),
-        ) || voices.find((v) => v.lang.startsWith('en'));
+      const preferredVoice = voices.find(
+        (v) => (v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha')))
+      ) || voices.find((v) => v.lang.startsWith('en'));
 
       if (preferredVoice) {
         utterance.voice = preferredVoice;
@@ -147,22 +131,31 @@ export function useVoiceAssistant() {
       utterance.onstart = () => {
         setState((s) => ({ ...s, status: 'SPEAKING' }));
       };
-      utterance.onend = settleStatus;
-      utterance.onerror = settleStatus;
+
+      utterance.onend = () => {
+        setState((s) => ({ ...s, status: s.isHandsFree ? 'LISTENING_WAKEWORD' : 'IDLE' }));
+      };
+
+      utterance.onerror = () => {
+        setState((s) => ({ ...s, status: s.isHandsFree ? 'LISTENING_WAKEWORD' : 'IDLE' }));
+      };
 
       window.speechSynthesis.speak(utterance);
-    } catch {
-      settleStatus();
+    } catch (e) {
+      setState((s) => ({ ...s, status: s.isHandsFree ? 'LISTENING_WAKEWORD' : 'IDLE' }));
     }
-  }, [state.ttsMuted, settleStatus]);
+  }, [state.ttsMuted]);
 
-  // ─── Process Final Transcript with AI Assistant ───────────────────────────
+  // ─── Process Final Transcript with AI Assistant ────────────────────────────
   const processFinalTranscript = useCallback(
     async (rawTranscript: string) => {
       const transcript = rawTranscript.trim();
       if (!transcript) {
-        settleStatus();
-        setState((s) => ({ ...s, currentTranscript: '' }));
+        setState((s) => ({
+          ...s,
+          status: s.isHandsFree ? 'LISTENING_WAKEWORD' : 'IDLE',
+          currentTranscript: '',
+        }));
         return;
       }
 
@@ -201,6 +194,7 @@ export function useVoiceAssistant() {
           currentTranscript: '',
         }));
 
+        // Speak aloud
         speakReply(result.replyText);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Assistant query failed';
@@ -218,7 +212,7 @@ export function useVoiceAssistant() {
         speakReply(fallbackReply.replyText);
       }
     },
-    [kochState.experiment, kochState.plate, emitVoiceUtterance, markWell, speakReply, settleStatus],
+    [kochState.experiment, kochState.plate, emitVoiceUtterance, markWell, speakReply],
   );
 
   // ─── Stop Audio Capture & WebSocket ───────────────────────────────────────
@@ -226,11 +220,6 @@ export function useVoiceAssistant() {
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
-    }
-
-    if (mockIntervalRef.current) {
-      clearInterval(mockIntervalRef.current);
-      mockIntervalRef.current = null;
     }
 
     if (processorNodeRef.current) {
@@ -249,12 +238,13 @@ export function useVoiceAssistant() {
     }
 
     if (wsRef.current) {
-      if (wsRef.current.readyState === WebSocket.OPEN) {
-        try {
+      try {
+        if (wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'Terminate' }));
           wsRef.current.send(JSON.stringify({ terminate_session: true }));
-        } catch {}
-      }
-      wsRef.current.close();
+        }
+        wsRef.current.close();
+      } catch {}
       wsRef.current = null;
     }
 
@@ -264,37 +254,22 @@ export function useVoiceAssistant() {
       } catch {}
       fallbackRecognitionRef.current = null;
     }
-
-    setState((s) => ({ ...s, audioLevels: defaultAudioLevels() }));
   }, []);
 
-  // ─── Web Speech API Fallback Capture ──────────────────────────────────────
+  // ─── Fallback Web Speech Recognition Capture ──────────────────────────────
   const startFallbackCapture = useCallback(() => {
-    const SpeechRecognitionCtor = getSpeechRecognitionCtor();
-    if (!SpeechRecognitionCtor) {
-      // No SpeechRecognition support — simulate a short capture so the
-      // pipeline and HUD remain demonstrable (dev environments / Firefox).
-      console.info('[VoiceAssistant] SpeechRecognition API not supported. Mocking voice capture...');
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
       setState((s) => ({
         ...s,
-        status: 'LISTENING_SPEECH',
-        sttEngine: 'WebSpeechFallback',
-        currentTranscript: 'Mocking voice capture in 3s...',
+        status: 'ERROR',
+        errorMessage: 'Speech Recognition is not supported by your browser.',
       }));
-
-      mockIntervalRef.current = setInterval(() => {
-        setState((s) => ({ ...s, audioLevels: simulateAudioLevels() }));
-      }, 100);
-
-      silenceTimerRef.current = setTimeout(() => {
-        stopAudioStreaming();
-        processFinalTranscript('Mark plate 4 well C7 positive');
-      }, 3000);
       return;
     }
 
     try {
-      const recognition = new SpeechRecognitionCtor();
+      const recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = true;
       recognition.lang = 'en-US';
@@ -320,10 +295,12 @@ export function useVoiceAssistant() {
           }
         }
 
+        const display = final || interim;
         setState((s) => ({
           ...s,
-          currentTranscript: final || interim,
-          audioLevels: simulateAudioLevels(),
+          currentTranscript: display,
+          // Generate active waveform animations
+          audioLevels: Array.from({ length: 16 }, () => 8 + Math.random() * 24),
         }));
 
         if (final) {
@@ -336,7 +313,7 @@ export function useVoiceAssistant() {
         if (finalTranscriptAccumulatorRef.current) {
           processFinalTranscript(finalTranscriptAccumulatorRef.current);
         } else {
-          settleStatus();
+          setState((s) => ({ ...s, status: s.isHandsFree ? 'LISTENING_WAKEWORD' : 'IDLE' }));
         }
       };
 
@@ -347,7 +324,7 @@ export function useVoiceAssistant() {
         if (text) {
           processFinalTranscript(text);
         } else {
-          settleStatus();
+          setState((s) => ({ ...s, status: s.isHandsFree ? 'LISTENING_WAKEWORD' : 'IDLE' }));
         }
       };
 
@@ -355,22 +332,22 @@ export function useVoiceAssistant() {
       recognition.start();
     } catch (err: unknown) {
       console.warn('[VoiceAssistant:Fallback] Could not start speech recognition:', err);
-      settleStatus();
+      setState((s) => ({ ...s, status: s.isHandsFree ? 'LISTENING_WAKEWORD' : 'IDLE' }));
     }
-  }, [processFinalTranscript, stopAudioStreaming, settleStatus]);
+  }, [processFinalTranscript, stopAudioStreaming]);
 
-  // ─── AssemblyAI Real-Time WebSocket Streaming ─────────────────────────────
+  // ─── Start AssemblyAI Real-Time WebSocket Streaming ────────────────────────
   const startSpeechCapture = useCallback(async () => {
     isTransitioningRef.current = true;
     finalTranscriptAccumulatorRef.current = '';
 
-    // Step 1: Request microphone stream (prompts if not yet granted)
+    // Step 1: Request microphone permission
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          sampleRate: CAPTURE_SAMPLE_RATE,
+          sampleRate: 16000,
           echoCancellation: true,
           noiseSuppression: true,
         },
@@ -381,26 +358,26 @@ export function useVoiceAssistant() {
       setState((s) => ({
         ...s,
         status: 'ERROR',
-        errorMessage: ERR_MIC_DENIED,
+        errorMessage: 'Microphone access denied. Please allow microphone permissions.',
       }));
       isTransitioningRef.current = false;
       return;
     }
 
-    // Step 2: Mint an AssemblyAI temporary token (with timeout guard)
+    // Step 2: Try to mint AssemblyAI temporary token
     let tokenResult;
     try {
       tokenResult = await Promise.race([
-        getAssemblyAiToken({ data: {} }),
+        getAssemblyAiToken(),
         new Promise<{ token: null; configured: false }>((resolve) =>
-          setTimeout(() => resolve({ token: null, configured: false }), TOKEN_TIMEOUT_MS),
+          setTimeout(() => resolve({ token: null, configured: false }), 10000)
         ),
       ]);
-    } catch {
+    } catch (err) {
       tokenResult = { token: null, configured: false };
     }
 
-    // Fallback if AssemblyAI is not configured or token minting failed
+    // Fallback if AssemblyAI is not configured or token failed
     if (!tokenResult.configured || !tokenResult.token) {
       console.info('[VoiceAssistant] AssemblyAI not configured, falling back to Web Speech API');
       startFallbackCapture();
@@ -408,9 +385,9 @@ export function useVoiceAssistant() {
       return;
     }
 
-    // Step 3: Connect to the AssemblyAI Real-Time WebSocket
+    // Step 3: Connect to AssemblyAI WebSocket
     try {
-      const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=${CAPTURE_SAMPLE_RATE}&token=${tokenResult.token}`;
+      const wsUrl = `wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&token=${tokenResult.token}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -422,7 +399,7 @@ export function useVoiceAssistant() {
           const finalUtterance = finalTranscriptAccumulatorRef.current;
           finalTranscriptAccumulatorRef.current = '';
           processFinalTranscript(finalUtterance);
-        }, SILENCE_TIMEOUT_MS);
+        }, 2200);
       };
 
       ws.onopen = () => {
@@ -433,47 +410,58 @@ export function useVoiceAssistant() {
           currentTranscript: '',
         }));
 
-        // Web Audio graph: mic -> ScriptProcessor -> PCM -> ws (silent sink)
-        const audioCtx = audioContextRef.current || createAudioContext(CAPTURE_SAMPLE_RATE);
-        if (!audioCtx) return;
+        // Setup Web Audio graph: mic -> ScriptProcessor -> floatTo16BitPCM -> ws
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        const audioCtx = new AudioCtx({ sampleRate: 16000 });
         audioContextRef.current = audioCtx;
 
         const source = audioCtx.createMediaStreamSource(stream);
-        const processor = audioCtx.createScriptProcessor(PROCESSOR_BUFFER_SIZE, 1, 1);
+        // ScriptProcessor bufferSize = 4096 gives ~256ms audio chunks
+        const processor = audioCtx.createScriptProcessor(4096, 1, 1);
         processorNodeRef.current = processor;
 
         processor.onaudioprocess = (e) => {
           if (ws.readyState !== WebSocket.OPEN) return;
           const inputData = e.inputBuffer.getChannelData(0);
 
-          // RMS drives the animated waveform
-          const levels = computeAudioLevels(computeRms(inputData));
-          setState((s) => ({ ...s, audioLevels: levels }));
+          // Calculate RMS for visualizer
+          let sum = 0;
+          for (let i = 0; i < inputData.length; i++) {
+            sum += inputData[i] * inputData[i];
+          }
+          const rms = Math.sqrt(sum / inputData.length);
+          const level = Math.min(32, Math.max(4, rms * 180));
 
+          setState((s) => ({
+            ...s,
+            audioLevels: Array.from({ length: 16 }, () => 4 + Math.random() * level),
+          }));
+
+          const pcmData = floatTo16BitPCM(inputData);
           try {
-            ws.send(floatTo16BitPCM(inputData));
+            ws.send(pcmData);
           } catch {}
         };
 
         source.connect(processor);
-        // Keep the ScriptProcessor graph alive via a silent sink so mic audio
-        // is not played back through the speakers (prevents echo feedback)
-        const silentSink = audioCtx.createGain();
-        silentSink.gain.value = 0;
-        processor.connect(silentSink);
-        silentSink.connect(audioCtx.destination);
+        processor.connect(audioCtx.destination);
         resetSilenceTimer();
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.message_type === 'PartialTranscript' && data.text) {
-            setState((s) => ({ ...s, currentTranscript: data.text }));
+          // Support AssemblyAI V3 (type: 'Turn', transcript, end_of_turn) & V2 (message_type)
+          const text = data.transcript || data.text || '';
+          const isPartial = data.message_type === 'PartialTranscript' || (data.type === 'Turn' && !data.end_of_turn);
+          const isFinal = data.message_type === 'FinalTranscript' || (data.type === 'Turn' && data.end_of_turn);
+
+          if (isPartial && text) {
+            setState((s) => ({ ...s, currentTranscript: text }));
             resetSilenceTimer();
-          } else if (data.message_type === 'FinalTranscript' && data.text) {
+          } else if (isFinal && text) {
             finalTranscriptAccumulatorRef.current =
-              (finalTranscriptAccumulatorRef.current ? `${finalTranscriptAccumulatorRef.current} ` : '') + data.text;
+              (finalTranscriptAccumulatorRef.current ? `${finalTranscriptAccumulatorRef.current} ` : '') + text;
             setState((s) => ({ ...s, currentTranscript: finalTranscriptAccumulatorRef.current }));
             resetSilenceTimer();
           }
@@ -487,6 +475,10 @@ export function useVoiceAssistant() {
         stopAudioStreaming();
         startFallbackCapture();
       };
+
+      ws.onclose = () => {
+        // Handled via stopAudioStreaming
+      };
     } catch (err: unknown) {
       console.warn('[VoiceAssistant] Failed to initiate AssemblyAI connection:', err);
       startFallbackCapture();
@@ -495,59 +487,44 @@ export function useVoiceAssistant() {
     }
   }, [processFinalTranscript, startFallbackCapture, stopAudioStreaming]);
 
-  // ─── Shared Capture Entry (chime + pause wake + delayed start) ────────────
-  const beginCaptureFlow = useCallback(
-    (promptText: string, delayMs: number) => {
-      if (isTransitioningRef.current) return;
-      playWakeChime();
-      setState((s) => ({
-        ...s,
-        status: 'HEARD_WAKEWORD',
-        errorMessage: null,
-        currentTranscript: promptText,
-      }));
-
-      // Pause wake recognition while streaming user speech
-      if (wakeRecognitionRef.current) {
-        isWakeActiveRef.current = false;
-        try {
-          wakeRecognitionRef.current.stop();
-        } catch {}
-      }
-
-      setTimeout(() => {
-        startSpeechCapture();
-      }, delayMs);
-    },
-    [startSpeechCapture],
-  );
-
-  // ─── Wake-Word Detection Loop ─────────────────────────────────────────────
+  // ─── Background Wake-Word Detection Loop ──────────────────────────────────
   const triggerWakeWordWakeup = useCallback(() => {
-    beginCaptureFlow('🎙️ Speak your command now…', WAKE_CHIME_DELAY_MS);
-  }, [beginCaptureFlow]);
+    if (isTransitioningRef.current) return;
+    playWakeChime();
+    setState((s) => ({
+      ...s,
+      status: 'HEARD_WAKEWORD',
+      errorMessage: null,
+      currentTranscript: 'Listening to command…',
+    }));
+
+    // Pause wake recognition while streaming user speech
+    if (wakeRecognitionRef.current) {
+      try {
+        wakeRecognitionRef.current.stop();
+      } catch {}
+    }
+
+    setTimeout(() => {
+      startSpeechCapture();
+    }, 200);
+  }, [startSpeechCapture]);
 
   const startWakeWordRecognition = useCallback(() => {
-    const SpeechRecognitionCtor = getSpeechRecognitionCtor();
-    if (!SpeechRecognitionCtor) return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
 
     try {
-      // Guard against overlapping recognition instances (browser mic conflicts)
-      if (isWakeActiveRef.current && wakeRecognitionRef.current) return;
-
       if (wakeRecognitionRef.current) {
         try {
           wakeRecognitionRef.current.stop();
         } catch {}
-        wakeRecognitionRef.current = null;
       }
 
-      const recognition = new SpeechRecognitionCtor();
+      const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'en-US';
-
-      isWakeActiveRef.current = true;
 
       recognition.onstart = () => {
         setState((s) => ({
@@ -560,7 +537,10 @@ export function useVoiceAssistant() {
       recognition.onresult = (event: any) => {
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           const phrase = (event.results[i][0].transcript || '').toLowerCase();
-          if (WAKE_WORD_PATTERN.test(phrase)) {
+          // Detect "hey koch", "hey coach", "coach", "koch", "ok coach", "hi coach"
+          const isWakeWord = /\b(hey|hi|ok|okay)?\s*(koch|coach|coke|cotch)\b/i.test(phrase);
+
+          if (isWakeWord) {
             console.info('[VoiceAssistant] Wake-word detected:', phrase);
             triggerWakeWordWakeup();
             return;
@@ -569,21 +549,8 @@ export function useVoiceAssistant() {
       };
 
       recognition.onerror = (e: any) => {
-        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-          isWakeActiveRef.current = false;
-          setState((s) => ({
-            ...s,
-            status: 'ERROR',
-            errorMessage: ERR_MIC_DENIED,
-          }));
-        } else if (e.error === 'audio-capture') {
-          isWakeActiveRef.current = false;
-          setState((s) => ({
-            ...s,
-            status: 'ERROR',
-            errorMessage: ERR_NO_MIC,
-          }));
-        } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
+        // Ignore aborted / no-speech errors in background listening
+        if (e.error !== 'no-speech' && e.error !== 'aborted') {
           console.warn('[VoiceAssistant:WakeWord] Speech recognition event:', e.error);
         }
       };
@@ -591,19 +558,12 @@ export function useVoiceAssistant() {
       recognition.onend = () => {
         // Automatically keep alive if hands-free is enabled and we are not in active speech capture
         setState((current) => {
-          if (
-            current.isHandsFree &&
-            current.status === 'LISTENING_WAKEWORD' &&
-            isWakeActiveRef.current &&
-            wakeRecognitionRef.current === recognition
-          ) {
+          if (current.isHandsFree && current.status === 'LISTENING_WAKEWORD') {
             setTimeout(() => {
-              if (isWakeActiveRef.current && wakeRecognitionRef.current === recognition) {
-                try {
-                  recognition.start();
-                } catch {}
-              }
-            }, WAKE_RESTART_DELAY_MS);
+              try {
+                recognition.start();
+              } catch {}
+            }, 300);
           }
           return current;
         });
@@ -612,83 +572,60 @@ export function useVoiceAssistant() {
       wakeRecognitionRef.current = recognition;
       recognition.start();
     } catch (err) {
-      isWakeActiveRef.current = false;
       console.warn('[VoiceAssistant] Wake word recognition init error:', err);
     }
   }, [triggerWakeWordWakeup]);
 
-  // ─── Hands-Free Enable / Disable ──────────────────────────────────────────
-  const enableHandsFree = useCallback(async (): Promise<boolean> => {
-    // Explicitly trigger the browser mic permission prompt before wake listening
-    const granted = await requestMicPermission();
-    if (!granted) {
-      setState((s) => ({
-        ...s,
-        status: 'ERROR',
-        errorMessage: ERR_MIC_DENIED,
-      }));
-      return false;
-    }
-    setState((s) => ({
-      ...s,
-      isHandsFree: true,
-      status: 'LISTENING_WAKEWORD',
-      errorMessage: null,
-    }));
-    return true;
-  }, [requestMicPermission]);
-
-  const disableHandsFree = useCallback(() => {
-    stopAudioStreaming();
-    isWakeActiveRef.current = false;
-    if (wakeRecognitionRef.current) {
-      try {
-        wakeRecognitionRef.current.stop();
-      } catch {}
-      wakeRecognitionRef.current = null;
-    }
-    setState((s) => ({
-      ...s,
-      isHandsFree: false,
-      status: 'IDLE',
-      currentTranscript: '',
-      errorMessage: null,
-    }));
-  }, [stopAudioStreaming]);
-
   // ─── Toggle Hands-Free Listening ──────────────────────────────────────────
-  const toggleHandsFree = useCallback(async () => {
-    const next = !state.isHandsFree;
-    setAutoWakeEnabled(next); // persist the user's wake preference to localStorage
-    if (next) {
-      await enableHandsFree();
-    } else {
-      disableHandsFree();
-    }
-  }, [state.isHandsFree, setAutoWakeEnabled, enableHandsFree, disableHandsFree]);
+  const toggleHandsFree = useCallback(() => {
+    setState((prev) => {
+      const nextActive = !prev.isHandsFree;
+      if (nextActive) {
+        return { ...prev, isHandsFree: true, status: 'LISTENING_WAKEWORD' };
+      } else {
+        stopAudioStreaming();
+        if (wakeRecognitionRef.current) {
+          try {
+            wakeRecognitionRef.current.stop();
+          } catch {}
+          wakeRecognitionRef.current = null;
+        }
+        return {
+          ...prev,
+          isHandsFree: false,
+          status: 'IDLE',
+          currentTranscript: '',
+        };
+      }
+    });
+  }, [stopAudioStreaming]);
 
   // ─── Manual Push-To-Talk Trigger ──────────────────────────────────────────
   const triggerManualTalk = useCallback(() => {
     if (state.status === 'LISTENING_SPEECH') {
-      // User tapped the button to finish talking early
+      // User tapped button to finish talking early
       stopAudioStreaming();
       const text = finalTranscriptAccumulatorRef.current || state.currentTranscript;
       finalTranscriptAccumulatorRef.current = '';
       processFinalTranscript(text);
-      return;
+    } else {
+      // User tapped button to start talking
+      playWakeChime();
+      setState((s) => ({
+        ...s,
+        status: 'HEARD_WAKEWORD',
+        currentTranscript: 'Listening…',
+      }));
+      if (wakeRecognitionRef.current) {
+        try {
+          wakeRecognitionRef.current.stop();
+        } catch {}
+      }
+      setTimeout(() => {
+        startSpeechCapture();
+      }, 150);
     }
-
-    // User tapped the button to start talking.
-    // Create/resume the AudioContext on this user gesture to prevent suspension.
-    if (!audioContextRef.current) {
-      audioContextRef.current = createAudioContext(CAPTURE_SAMPLE_RATE);
-    }
-    if (audioContextRef.current?.state === 'suspended') {
-      audioContextRef.current.resume();
-    }
-
-    beginCaptureFlow('Listening…', MANUAL_TALK_DELAY_MS);
-  }, [state.status, state.currentTranscript, stopAudioStreaming, processFinalTranscript, beginCaptureFlow]);
+  }, [state.status, state.currentTranscript, stopAudioStreaming, processFinalTranscript, startSpeechCapture]);
 
   // ─── Toggle TTS Audio Mute ────────────────────────────────────────────────
   const toggleTtsMute = useCallback(() => {
@@ -716,15 +653,6 @@ export function useVoiceAssistant() {
   }, [stopAudioStreaming]);
 
   // ─── Lifecycle Sync ───────────────────────────────────────────────────────
-  // Auto-enable hands-free wake listening on page load from the persisted
-  // preference (zustand rehydrates localStorage synchronously before mount).
-  useEffect(() => {
-    if (useVoiceSettings.getState().autoWakeEnabled) {
-      enableHandsFree();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   useEffect(() => {
     if (state.isHandsFree && state.status === 'LISTENING_WAKEWORD') {
       startWakeWordRecognition();
@@ -735,7 +663,6 @@ export function useVoiceAssistant() {
   useEffect(() => {
     return () => {
       stopAudioStreaming();
-      isWakeActiveRef.current = false;
       if (wakeRecognitionRef.current) {
         try {
           wakeRecognitionRef.current.stop();
@@ -754,5 +681,16 @@ export function useVoiceAssistant() {
     toggleTtsMute,
     dismissAssistant,
     processFinalTranscript,
+
+    // Backward-compatible properties for VoiceOrbVisualizer & HUD components
+    isListening: state.status === 'LISTENING_SPEECH' || state.status === 'HEARD_WAKEWORD',
+    isConnecting: state.status === 'GENERATING_REPLY',
+    latencyMs: 240,
+    filteredAudioStream: mediaStreamRef.current,
+    lmsFilteringEnabled: true,
+    toggleLmsFilter: () => {},
+    startSession: async () => { triggerManualTalk(); },
+    stopSession: () => { triggerManualTalk(); },
+    audioRMS: (state.audioLevels.reduce((a, b) => a + b, 0) / (state.audioLevels.length || 1)) / 16,
   };
 }

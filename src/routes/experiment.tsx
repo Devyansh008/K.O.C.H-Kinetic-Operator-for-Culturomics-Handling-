@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { SteampunkFrame } from '../components/layout/SteampunkFrame';
 import { VerticalLensSidebar } from '../components/layout/VerticalLensSidebar';
 import { CrtOverlay } from '../components/ui/CrtOverlay';
-import { GlobalVoiceAssistant } from '../components/voice/GlobalVoiceAssistant';
 import { VoiceOrbVisualizer } from '../components/voice/VoiceOrbVisualizer';
 import { WebcamFeed } from '../components/camera/WebcamFeed';
 import { SystemEventLogs } from '../components/telemetry/SystemEventLogs';
@@ -100,9 +99,6 @@ function ExperimentLensPage() {
             </div>
           </div>
         </div>
-
-        {/* Floating Global Voice Assistant Bubble */}
-        <GlobalVoiceAssistant />
       </SteampunkFrame>
     </div>
   );
