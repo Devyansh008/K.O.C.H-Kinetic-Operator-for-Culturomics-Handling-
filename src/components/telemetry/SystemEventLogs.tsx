@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { ScrollText, Activity, Filter, Download, ChevronDown, ChevronRight, Eye } from 'lucide-react';
 import { useKoch } from '../../lib/mockState';
-import { GrowthVelocityChart } from './GrowthVelocityChart';
+import { MultiSlideGrowthMatrix } from '../hud/MultiSlideGrowthMatrix';
+import { CentrifugeTelemetryPanel } from '../hud/CentrifugeTelemetryPanel';
 import type { EventType } from '../../types';
 
 export const SystemEventLogs: React.FC = () => {
@@ -13,13 +14,13 @@ export const SystemEventLogs: React.FC = () => {
   const filtered = filter === 'ALL' ? events : events.filter((e) => e.type === filter);
 
   return (
-    <div className="w-full h-full flex flex-col justify-between font-mono text-xs relative overflow-hidden">
+    <div className="w-full h-full flex flex-col font-mono text-xs relative overflow-y-auto no-scrollbar pr-1 space-y-3">
       {/* Optical Slide Microscopic Warm Vignette Background */}
-      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_center,_rgba(245,158,11,0.12)_0%,_rgba(120,53,15,0.05)_50%,_rgba(0,0,0,0.8)_100%)] animate-flicker" />
+      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_center,_rgba(245,158,11,0.12)_0%,_rgba(120,53,15,0.05)_50%,_rgba(0,0,0,0.8)_100%)] animate-flicker" />
 
       {/* Top Header */}
-      <div className="relative z-10">
-        <div className="flex items-center justify-between pb-2 border-b border-amber-500/20 mb-2">
+      <div className="relative z-10 shrink-0">
+        <div className="flex items-center justify-between pb-2 border-b border-amber-500/20">
           <div className="flex items-center gap-1.5">
             <ScrollText className="w-4 h-4 text-amber-400" />
             <h2 className="text-xs uppercase tracking-widest text-amber-300 font-bold">
@@ -30,20 +31,24 @@ export const SystemEventLogs: React.FC = () => {
             Immutable Append-Only Audit Stream
           </span>
         </div>
+      </div>
 
-        {/* Growth Velocity chart on top */}
-        <div className="mb-3">
-          <GrowthVelocityChart />
-        </div>
+      {/* TWO Dedicated HUD Components: Multi-Slide Growth Matrix & Centrifuge Telemetry (Stacked Vertically) */}
+      <div className="relative z-10 flex flex-col gap-3 shrink-0">
+        <MultiSlideGrowthMatrix />
+        <CentrifugeTelemetryPanel />
+      </div>
 
-        {/* Filter bar */}
-        <div className="flex items-center gap-1.5 mb-2 overflow-x-auto pb-1">
+      {/* Filter bar */}
+      <div className="relative z-10 flex items-center justify-between gap-1.5 pt-1 border-t border-amber-500/20 shrink-0">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
           <Filter className="w-3 h-3 text-amber-400" />
+          <span className="text-[10px] text-stone-400 font-bold uppercase mr-1">Filter Stream:</span>
           {(['ALL', 'VOICE_UTTERANCE', 'INTENT', 'FRAME_MARK', 'STATE_CHANGE'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setFilter(t)}
-              className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+              className={`text-[10px] px-2 py-0.5 rounded border transition-colors cursor-pointer ${
                 filter === t
                   ? 'border-amber-400 text-amber-200 bg-amber-500/20 shadow-[0_0_8px_#f59e0b]'
                   : 'border-stone-800 text-stone-400 hover:text-stone-300'
@@ -53,6 +58,9 @@ export const SystemEventLogs: React.FC = () => {
             </button>
           ))}
         </div>
+        <span className="text-[10px] text-stone-500 shrink-0 hidden sm:inline">
+          {filtered.length} Recorded Events
+        </span>
       </div>
 
       {/* Event Stream List */}

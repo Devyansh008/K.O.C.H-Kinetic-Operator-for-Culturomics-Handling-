@@ -75,11 +75,11 @@ function RootLayout() {
                     <Outlet />
                   </main>
                 </div>
-
-                {/* Persistent Site-Wide Voice Assistant */}
-                <GlobalVoiceAssistant />
               </div>
             )}
+
+            {/* Persistent Global Voice Assistant Capsule in Front of Everything */}
+            {!isIntroRoute && <GlobalVoiceAssistant />}
           </KochProvider>
         </div>
         <Scripts />
