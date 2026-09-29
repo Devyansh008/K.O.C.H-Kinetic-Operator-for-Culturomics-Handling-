@@ -5,20 +5,30 @@ export default {
   theme: {
     extend: {
       colors: {
-        // K.O.C.H. lab palette — Black & White edition
+        // Steampunk Brass & Mahogany Palette
+        steampunk: {
+          brass: '#d4af37',
+          amber: '#f59e0b',
+          glow: '#fbbf24',
+          darkbrass: '#78350f',
+          mahogany: '#2d1810',
+          metal: '#1c1917',
+          vignette: '#0c0a09',
+        },
+        // K.O.C.H. lab palette
         lab: {
-          bg:       '#000000',   // pure black
-          surface:  '#0c0c0c',   // near-black surface
-          card:     '#141414',   // elevated card
-          border:   '#222222',   // subtle border
-          accent:   '#ffffff',   // pure white — primary interactive
-          accent2:  '#909090',   // medium gray — secondary
-          warn:     '#cccccc',   // light gray — warnings
-          danger:   '#aaaaaa',   // medium-light gray — errors
-          success:  '#d4d4d4',   // near-white — positive states
-          muted:    '#444444',   // dark-medium gray
-          text:     '#f0f0f0',   // near-white text
-          subtext:  '#707070',   // mid gray subtext
+          bg:       '#000000',
+          surface:  '#0c0c0c',
+          card:     '#141414',
+          border:   '#222222',
+          accent:   '#ffffff',
+          accent2:  '#909090',
+          warn:     '#f59e0b',
+          danger:   '#ef4444',
+          success:  '#10b981',
+          muted:    '#444444',
+          text:     '#f0f0f0',
+          subtext:  '#707070',
         },
       },
       fontFamily: {
@@ -29,6 +39,8 @@ export default {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'scan': 'scan 2s linear infinite',
         'glow': 'glow 2s ease-in-out infinite alternate',
+        'flicker': 'flicker 4s infinite',
+        'float': 'float 6s ease-in-out infinite',
       },
       keyframes: {
         scan: {
@@ -36,8 +48,20 @@ export default {
           '100%': { transform: 'translateY(100vh)' },
         },
         glow: {
-          '0%':   { boxShadow: '0 0 5px rgba(255,255,255,0.15)' },
-          '100%': { boxShadow: '0 0 20px rgba(255,255,255,0.45), 0 0 40px rgba(255,255,255,0.1)' },
+          '0%':   { boxShadow: '0 0 5px rgba(245,158,11,0.2)' },
+          '100%': { boxShadow: '0 0 25px rgba(245,158,11,0.6), 0 0 45px rgba(212,175,55,0.3)' },
+        },
+        flicker: {
+          '0%, 100%': { opacity: '0.96' },
+          '20%': { opacity: '0.85' },
+          '40%': { opacity: '0.98' },
+          '60%': { opacity: '0.88' },
+          '80%': { opacity: '1' },
+          '90%': { opacity: '0.92' },
+        },
+        float: {
+          '0%, 100%': { transform: 'translateY(0px) rotate(0deg)' },
+          '50%': { transform: 'translateY(-12px) rotate(2deg)' },
         },
       },
     },
