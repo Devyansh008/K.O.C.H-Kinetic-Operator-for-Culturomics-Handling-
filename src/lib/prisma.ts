@@ -448,9 +448,11 @@ function createPrismaClient(): PrismaClient {
     return createInMemoryPrisma();
   }
 
-  // Ensure raw special characters in the database user password are URL encoded for Prisma
+  // Ensure raw special characters in the database user password are URL encoded for Prisma.
+  // Passwords that already contain valid percent-escapes are left untouched —
+  // re-encoding them corrupts the credentials (e.g. %23 -> %2523).
   const parts = dbUrl.match(/^(postgresql:\/\/[^:]+:)(.*)(@.*)$/);
-  if (parts && /[^a-zA-Z0-9_\-\.~%]/.test(parts[2])) {
+  if (parts && !/%[0-9a-fA-F]{2}/.test(parts[2]) && /[^a-zA-Z0-9_\-\.~]/.test(parts[2])) {
     dbUrl = parts[1] + encodeURIComponent(parts[2]) + parts[3];
     process.env.DATABASE_URL = dbUrl;
   }

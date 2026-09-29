@@ -14,8 +14,8 @@ import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 
 import { resolveIntent } from '../services/intentResolver';
-import { logTelemetryEvent, EventType } from '../db/repositories';
-import { updateActiveState, type ActiveCoordinate } from '../services/state';
+import { logTelemetryEvent, resolveActiveExperiment, EventType } from '../db/repositories';
+import { updateActiveState, initActiveState, type ActiveCoordinate } from '../services/state';
 
 // ─── AssemblyAI Real-Time Token ──────────────────────────────────────────────
 
@@ -112,42 +112,46 @@ export async function handleGenerateAssistantReply(
   const resolved = resolveIntent(data.transcript);
   let actionExecuted = false;
 
-  // Execute state updates and telemetry logging if an experiment session is active
-  if (data.experimentId) {
-    try {
-      await logTelemetryEvent({
-        experimentId: data.experimentId,
-        type: EventType.VOICE_UTTERANCE,
-        rawPayload: {
-          transcript: data.transcript,
-          source: 'hey-koch-assistant',
-        } as Prisma.InputJsonValue,
-        frameTimestamp: new Date(),
-      });
+  // Resolve a real experiment row: the client sends in-memory mock ids (or none),
+  // so blindly trusting data.experimentId drops records on FK violations.
+  // Falls back to the latest ACTIVE experiment, or creates a Voice Session.
+  try {
+    const experiment = await resolveActiveExperiment(data.experimentId);
 
-      await logTelemetryEvent({
-        experimentId: data.experimentId,
-        type: EventType.INTENT,
-        rawPayload: resolved as unknown as Prisma.InputJsonValue,
-        frameTimestamp: new Date(),
-      });
+    await logTelemetryEvent({
+      experimentId: experiment.id,
+      type: EventType.VOICE_UTTERANCE,
+      rawPayload: {
+        transcript: data.transcript,
+        source: 'hey-koch-assistant',
+      } as Prisma.InputJsonValue,
+      frameTimestamp: new Date(),
+    });
 
-      if (resolved.action === 'MARK_WELL_PENDING' && 'plateLabel' in resolved && 'wellCoordinate' in resolved) {
-        const partialCoord: ActiveCoordinate = {
-          plateLabel: resolved.plateLabel,
-          plateId: '',
-          wellCoordinate: resolved.wellCoordinate,
-          wellId: '',
-        };
-        updateActiveState(data.experimentId, { activeCoordinate: partialCoord });
-        actionExecuted = true;
-      } else if (resolved.action === 'START_TIMER') {
-        updateActiveState(data.experimentId, { timerMarks: [new Date().toISOString()] });
-        actionExecuted = true;
-      }
-    } catch (e) {
-      console.warn('[generateAssistantReply] Could not persist telemetry to database:', e);
+    await logTelemetryEvent({
+      experimentId: experiment.id,
+      type: EventType.INTENT,
+      rawPayload: resolved as unknown as Prisma.InputJsonValue,
+      frameTimestamp: new Date(),
+    });
+
+    if (resolved.action === 'MARK_WELL_PENDING' && 'plateLabel' in resolved && 'wellCoordinate' in resolved) {
+      const partialCoord: ActiveCoordinate = {
+        plateLabel: resolved.plateLabel,
+        plateId: '',
+        wellCoordinate: resolved.wellCoordinate,
+        wellId: '',
+      };
+      initActiveState(experiment.id);
+      updateActiveState(experiment.id, { activeCoordinate: partialCoord });
+      actionExecuted = true;
+    } else if (resolved.action === 'START_TIMER') {
+      initActiveState(experiment.id);
+      updateActiveState(experiment.id, { timerMarks: [new Date().toISOString()] });
+      actionExecuted = true;
     }
+  } catch (e) {
+    console.warn('[generateAssistantReply] Could not persist telemetry to database:', e);
   }
 
   // Try Gemini LLM first if API key is provided

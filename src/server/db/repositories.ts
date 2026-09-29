@@ -85,6 +85,30 @@ export async function createExperiment(name: string): Promise<Experiment> {
 }
 
 /**
+ * Resolves a real Experiment row for telemetry logging:
+ *   1. Uses the preferred id when it exists in the database.
+ *   2. Falls back to the most recent ACTIVE experiment.
+ *   3. Creates a new "Voice Session" experiment when none exists.
+ *
+ * Client-side mock sessions carry fake in-memory ids, so this guarantee
+ * is what keeps voice records from being dropped on FK violations.
+ */
+export async function resolveActiveExperiment(preferredId?: string): Promise<Experiment> {
+  if (preferredId) {
+    const existing = await prisma.experiment.findUnique({ where: { id: preferredId } });
+    if (existing) return existing;
+  }
+
+  const latest = await prisma.experiment.findFirst({
+    where: { status: ExperimentStatus.ACTIVE },
+    orderBy: { startedAt: 'desc' },
+  });
+  if (latest) return latest;
+
+  return createExperiment(`Voice Session ${new Date().toISOString().slice(0, 10)}`);
+}
+
+/**
  * Fetches an Experiment with all related plates, wells, telemetry events,
  * and ELN reports included (full hydration for report compilation and
  * active-state snapshots).
