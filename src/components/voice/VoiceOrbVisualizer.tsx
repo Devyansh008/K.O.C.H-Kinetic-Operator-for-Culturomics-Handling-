@@ -172,7 +172,7 @@ export const VoiceOrbVisualizer: React.FC = () => {
           </button>
 
           <button
-            onClick={() => toggleLmsFilter(!lmsFilteringEnabled)}
+            onClick={() => toggleLmsFilter()}
             className={`px-3 py-2 rounded-xl font-mono text-xs font-semibold flex items-center gap-1.5 border transition-all ${
               lmsFilteringEnabled
                 ? 'bg-amber-950/40 border-amber-500 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.3)]'

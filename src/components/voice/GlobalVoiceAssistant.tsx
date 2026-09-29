@@ -248,9 +248,9 @@ export const GlobalVoiceAssistant: React.FC = () => {
                       <CheckCircle2 className="w-3 h-3" />
                       <span>Action: {state.assistantReply.intent.action}</span>
                     </div>
-                    {state.assistantReply.actionResult && (
+                    {state.assistantReply.actionExecuted && (
                       <span className="text-stone-400 italic">
-                        {state.assistantReply.actionResult.message}
+                        Action completed successfully
                       </span>
                     )}
                   </div>
