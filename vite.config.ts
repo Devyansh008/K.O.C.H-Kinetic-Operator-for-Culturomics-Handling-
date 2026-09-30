@@ -6,7 +6,9 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [
     tanstackStart(),
-    nitro(),
+    nitro({
+      preset: process.env.NITRO_PRESET || (process.env.VERCEL ? 'vercel' : undefined),
+    }),
     viteReact(),
   ],
 });
