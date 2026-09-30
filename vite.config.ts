@@ -4,7 +4,11 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [
-    tanstackStart(),
+    tanstackStart({
+      server: {
+        preset: 'vercel',
+      }
+    }),
     viteReact(),
   ],
 });
