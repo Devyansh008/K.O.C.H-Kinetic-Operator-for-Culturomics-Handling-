@@ -1,7 +1,8 @@
 // Prisma schema for Project K.O.C.H.
 // Generator
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
 generator zod {

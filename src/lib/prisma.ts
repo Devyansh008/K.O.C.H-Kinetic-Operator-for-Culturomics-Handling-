@@ -473,9 +473,7 @@ function createPrismaClient(): PrismaClient {
 // otherwise create a fresh one and cache it.
 const prisma: PrismaClient = globalThis.__prisma ?? createPrismaClient();
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.__prisma = prisma;
-}
+globalThis.__prisma = prisma;
 
 export { prisma, prisma as db };
 export default prisma;
